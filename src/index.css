@@ -141,10 +141,8 @@
   min-height: 0;
 }
 @media (max-width: 767px) {
-  /* Clear the fixed mobile menu button at the top-right. */
-  .main-content {
-    padding-top: 5.25rem;
-  }
+  /* Taste shell: the mobile menu button now lives in the header
+     row, not fixed at the top-right, so no extra top padding. */
   /* Data rows keep their 6-column layout and scroll sideways instead of crushing. */
   .data-row {
     min-width: 620px;
@@ -168,7 +166,10 @@
 }
 
 /* ---- Company light theme: translate old dark dashboard classes ---- */
-html:not(.theme-dark) main { background: #EEF2F7; }
+/* Taste fix: this old rule forced <main> back to slate, which wiped
+   out the white framed-sheet. The sheet itself must stay white in
+   light mode; the frame around it is the tinted #EDF1F5. */
+html:not(.theme-dark) main.main-content { background: #ffffff; }
 html:not(.theme-dark) main .bg-slate-900\/40, html:not(.theme-dark) main .bg-slate-900\/60, html:not(.theme-dark) main .bg-slate-900\/50, html:not(.theme-dark) main .bg-slate-900\/30,
 html:not(.theme-dark) main .bg-slate-900\/80, html:not(.theme-dark) main .bg-slate-800\/80, html:not(.theme-dark) main .bg-slate-800\/50, html:not(.theme-dark) main .bg-slate-800\/40 {
   background-color: #ffffff !important;
