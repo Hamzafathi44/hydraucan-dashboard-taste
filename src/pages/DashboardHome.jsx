@@ -1,58 +1,47 @@
-import { motion as Motion } from 'motion/react';
 import { Calendar as CalendarIcon, PieChart as PieChartIcon, Activity, BarChart3 } from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend 
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend
 } from 'recharts';
 
+// Taste Skill v2, app sheet framed-sheet: the dashboard is an app
+// screen, not a landing page. KPIs are type in one container split
+// by 1px dividers (no tiles, no icon chips, no sparklines), colour
+// goes on data only (one navy hue, not a rainbow), surfaces are
+// flat with a 1px line, tables are rules with right-aligned
+// tabular figures, and nothing performs an entrance. All data
+// computations below are unchanged from the original.
 export const DashboardHome = ({ stats, dataList, chartData }) => {
   return (
-    <Motion.div
-      key="home"
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="space-y-8"
-    >
-      <header className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white mb-2">Tableau de Bord Analytique</h1>
-        <p className="text-slate-400 text-sm font-medium">Analyse détaillée des performances et de la consommation du mois en cours.</p>
+    <div className="space-y-4">
+      <header>
+        <h1 className="text-2xl font-semibold text-slate-900 leading-tight">Tableau de bord</h1>
+        <p className="text-sm text-slate-500 mt-1">Mois en cours · Travaux hydrauliques, Fquih Ben Salah.</p>
       </header>
 
-      {/* Monthly Overview Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => (
-          <Motion.div 
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-            className="stat-card"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{stat.label}</span>
-              <stat.icon className={`w-5 h-5 ${stat.color}`} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-2xl font-black text-white">{stat.value}</span>
-              {stat.breakdown && (
-                <div className="flex items-center gap-3 mt-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-                  <span>RNVL: <span className="text-cyan-400">{stat.breakdown.RNVL || 0}</span></span>
-                  <span>FUITE: <span className="text-cyan-400">{stat.breakdown.FUITE || 0}</span></span>
-                  <span>F. SP: <span className="text-cyan-400">{stat.breakdown['F. SP'] || 0}</span></span>
-                </div>
-              )}
-            </div>
-          </Motion.div>
+      {/* Monthly overview: one KPI strip, not four tiles */}
+      <div className="kpi-strip">
+        {stats.map((stat) => (
+          <div key={stat.label} className="kpi-cell">
+            <span className="text-sm text-slate-500">{stat.label}</span>
+            <span className="text-2xl font-semibold text-slate-900 tabular-nums">{stat.value}</span>
+            {stat.breakdown && (
+              <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 tabular-nums">
+                <span>RNVL: {stat.breakdown.RNVL || 0}</span>
+                <span>FUITE: {stat.breakdown.FUITE || 0}</span>
+                <span>F. SP: {stat.breakdown['F. SP'] || 0}</span>
+              </div>
+            )}
+          </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Work Schedule Chart */}
-        <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-line p-4 sm:p-6 lg:p-8 shadow-lg">
+        <div className="bg-white rounded-xl border border-line p-6">
           <div className="flex items-center gap-2 mb-6">
-            <CalendarIcon className="w-4 h-4 text-cyan-500" />
-            <h2 className="text-xs font-bold uppercase tracking-widest text-white">Calendrier de Travail (Mois en cours)</h2>
+            <CalendarIcon className="w-4 h-4 text-[#16294D]" />
+            <h2 className="text-sm font-semibold text-slate-900">Calendrier de travail (mois en cours)</h2>
           </div>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -72,25 +61,25 @@ export const DashboardHome = ({ stats, dataList, chartData }) => {
                 });
                 return schedule;
               })()}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="day" fontSize={10} axisLine={false} tickLine={false} stroke="#94a3b8" />
-                <YAxis fontSize={10} axisLine={false} tickLine={false} stroke="#94a3b8" />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#0A1020', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)' }}
-                  itemStyle={{ color: '#fff' }}
-                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EDEDED" />
+                <XAxis dataKey="day" fontSize={12} axisLine={false} tickLine={false} stroke="#64748b" />
+                <YAxis fontSize={12} axisLine={false} tickLine={false} stroke="#64748b" allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #EDEDED' }}
+                  itemStyle={{ color: '#101828' }}
+                  cursor={{ fill: 'rgba(22,41,77,0.05)' }}
                 />
-                <Bar dataKey="count" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="count" fill="#16294D" radius={[0, 0, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Nature Distribution Chart */}
-        <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-line p-4 sm:p-6 lg:p-8 shadow-lg">
+        {/* Nature Distribution Chart: one navy hue family, not rainbow */}
+        <div className="bg-white rounded-xl border border-line p-6">
           <div className="flex items-center gap-2 mb-6">
-            <PieChartIcon className="w-4 h-4 text-cyan-500" />
-            <h2 className="text-xs font-bold uppercase tracking-widest text-white">Répartition par Nature</h2>
+            <PieChartIcon className="w-4 h-4 text-[#16294D]" />
+            <h2 className="text-sm font-semibold text-slate-900">Répartition par nature</h2>
           </div>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -101,30 +90,30 @@ export const DashboardHome = ({ stats, dataList, chartData }) => {
                   cy="50%"
                   innerRadius={60}
                   outerRadius={80}
-                  paddingAngle={5}
+                  paddingAngle={2}
                   dataKey="value"
                   label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                 >
                   {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={['#06b6d4', '#3b82f6', '#0ea5e9', '#6366f1', '#10b981', '#f59e0b'][index % 6]} stroke="rgba(255,255,255,0.05)" />
+                    <Cell key={`cell-${index}`} fill={['#16294D', '#2E4A73', '#5B7AA0', '#8AA0BC', '#C2D0E0', '#E2E6EA'][index % 6]} stroke="#ffffff" />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={{ backgroundColor: '#0A1020', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} itemStyle={{ color: '#fff' }} />
-                <Legend verticalAlign="bottom" height={36}/>
+                <Tooltip contentStyle={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #EDEDED', color: '#101828' }} itemStyle={{ color: '#101828' }} />
+                <Legend verticalAlign="bottom" height={36} />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Material Consumption */}
-        <div className="lg:col-span-1 bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-line p-4 sm:p-6 lg:p-8 shadow-lg">
+        <div className="lg:col-span-1 bg-white rounded-xl border border-line p-6">
           <div className="flex items-center gap-2 mb-6">
-            <Activity className="w-4 h-4 text-cyan-500" />
-            <h2 className="text-xs font-bold uppercase tracking-widest text-white">Consommation de Matériel</h2>
+            <Activity className="w-4 h-4 text-[#16294D]" />
+            <h2 className="text-sm font-semibold text-slate-900">Consommation de matériel</h2>
           </div>
-          <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+          <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
             {(() => {
               const now = new Date();
               const materials = dataList
@@ -141,15 +130,15 @@ export const DashboardHome = ({ stats, dataList, chartData }) => {
                   }
                   return acc;
                 }, {});
-              
+
               const sortedMats = Object.entries(materials).sort((a, b) => b[1] - a[1]);
-              
-              if (sortedMats.length === 0) return <p className="text-slate-400 text-sm italic">Aucun matériel enregistré ce mois-ci.</p>;
+
+              if (sortedMats.length === 0) return <p className="text-slate-500 text-sm italic">Aucun matériel enregistré ce mois-ci.</p>;
 
               return sortedMats.map(([name, count]) => (
-                <div key={name} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
-                  <span className="text-sm font-medium text-slate-200">{name}</span>
-                  <span className="px-2 py-1 bg-cyan-500/10 rounded-lg text-[10px] font-bold text-cyan-400 border border-cyan-500/20">{count} fois</span>
+                <div key={name} className="flex items-center justify-between py-3 border-b border-line last:border-b-0">
+                  <span className="text-sm font-medium text-slate-700">{name}</span>
+                  <span className="text-sm text-slate-900 tabular-nums">{count} fois</span>
                 </div>
               ));
             })()}
@@ -157,18 +146,18 @@ export const DashboardHome = ({ stats, dataList, chartData }) => {
         </div>
 
         {/* Nature Summary Table */}
-        <div className="lg:col-span-2 bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-line p-4 sm:p-6 lg:p-8 shadow-lg">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-line p-6">
           <div className="flex items-center gap-2 mb-6">
-            <BarChart3 className="w-4 h-4 text-cyan-500" />
-            <h2 className="text-xs font-bold uppercase tracking-widest text-white">Résumé des Travaux par Nature</h2>
+            <BarChart3 className="w-4 h-4 text-[#16294D]" />
+            <h2 className="text-sm font-semibold text-slate-900">Résumé des travaux par nature</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] text-left">
               <thead>
                 <tr className="border-b border-line">
-                  <th className="pb-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">Nature du Travail</th>
-                  <th className="pb-4 text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">Nombre</th>
-                  <th className="pb-4 text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Tendance</th>
+                  <th className="pb-4 text-xs font-medium text-slate-500">Nature du travail</th>
+                  <th className="pb-4 text-xs font-medium text-slate-500 text-right">Nombre</th>
+                  <th className="pb-4 text-xs font-medium text-slate-500 text-right">Évolution vs mois précédent</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -199,11 +188,11 @@ export const DashboardHome = ({ stats, dataList, chartData }) => {
                     const prevCount = lastMonthNatures[name] || 0;
                     const diff = count - prevCount;
                     return (
-                      <tr key={name} className="group hover:bg-slate-800/40 transition-colors">
-                        <td className="py-4 text-sm font-medium text-slate-200">{name}</td>
-                        <td className="py-4 text-sm font-black text-white text-center">{count}</td>
+                      <tr key={name} className="group hover:bg-slate-50 transition-colors">
+                        <td className="py-4 text-sm font-medium text-slate-700">{name}</td>
+                        <td className="py-4 text-sm font-semibold text-slate-900 text-right tabular-nums">{count}</td>
                         <td className="py-4 text-right">
-                          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${diff >= 0 ? 'bg-cyan-500/10 text-cyan-400' : 'bg-red-500/10 text-red-400'}`}>
+                          <span className="text-xs font-medium text-slate-500 tabular-nums">
                             {diff >= 0 ? '+' : ''}{diff}
                           </span>
                         </td>
@@ -216,6 +205,6 @@ export const DashboardHome = ({ stats, dataList, chartData }) => {
           </div>
         </div>
       </div>
-    </Motion.div>
+    </div>
   );
 };
