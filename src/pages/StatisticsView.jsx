@@ -1,3 +1,11 @@
+// PanelUI Web style (structure/style inspiration only — no PanelUI code
+// copied here). PanelUI (panelui.dev) is MIT-licensed. Only its Web
+// library (React + Tailwind CSS 4, Frame / Tabs presentation) is used
+// as inspiration here; the native App library is not compatible with
+// this web app and is not used. The Frame and Tabs below are built
+// locally in .jsx, in the Taste framed-sheet theme (frame #EDF1F5,
+// white sheet in light mode, navy #16294D), using only motion and
+// lucide-react, which are already in package.json.
 // Amicro Mono style (style inspiration only — no Amicro code copied here).
 // Amicro (amicro.dev) is MIT-licensed; its Mono Charts use a single hue
 // family, rounded shapes and lucide icons. These charts below are built
@@ -127,6 +135,56 @@ const MonoArea = ({ data, title }) => {
   );
 };
 
+// PanelUI-Web-style Frame panel: titled header, 1px border, white
+// surface in light mode (via the existing light-theme overrides for
+// bg-slate-900/40 in src/index.css), consistent padding, mono navy icon.
+// Presentation only — it never touches the chart data it wraps.
+const PanelFrame = ({ icon: Icon, title, children }) => (
+  <section className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-line p-4 sm:p-6 lg:p-8 shadow-lg">
+    <header className="mb-6 flex items-center gap-2">
+      <Icon className="w-5 h-5 text-[#5B7AA0]" />
+      <h2 className="text-sm font-bold uppercase tracking-widest text-white">{title}</h2>
+    </header>
+    {children}
+  </section>
+);
+
+// PanelUI-Web-style Tabs: one segmented control, not separate pills.
+// Active tab is navy with a motion animated indicator (layoutId);
+// inactive tabs are slate. Same options and same onChange behaviour
+// as the previous month pills — only the presentation changes.
+const PanelTabs = ({ options, value, onChange, label }) => (
+  <div
+    role="tablist"
+    aria-label={label}
+    className="flex gap-1 overflow-x-auto rounded-full border border-line bg-white/5 p-1 pb-1 scrollbar-hide max-w-full sm:max-w-xl"
+  >
+    {options.map((option) => {
+      const active = option === value;
+      return (
+        <button
+          key={option}
+          role="tab"
+          aria-selected={active}
+          onClick={() => onChange(option)}
+          className={`relative shrink-0 rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-wider transition-colors whitespace-nowrap ${
+            active ? 'text-white' : 'text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          {active && (
+            <Motion.span
+              layoutId="statistics-month-tab"
+              transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+              className="absolute inset-0 rounded-full bg-[#2E4A73] shadow-lg"
+            />
+          )}
+          <span className="relative">{option}</span>
+        </button>
+      );
+    })}
+  </div>
+);
+
 export const StatisticsView = ({ dataList }) => {
   // 1. Évolution Mensuelle (Derniers 12 mois)
   const monthlyData = useMemo(() => {
@@ -248,42 +306,20 @@ export const StatisticsView = ({ dataList }) => {
           <Filter className="w-4 h-4 text-slate-400" />
           <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">Filtrer par Mois</h2>
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide max-w-full sm:max-w-xl">
-          {months.map(m => (
-            <button
-              key={m}
-              onClick={() => setSelectedMonth(m)}
-              className={`px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all whitespace-nowrap ${
-                selectedMonth === m
-                ? 'bg-[#2E4A73] text-white shadow-lg'
-                : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-900 border border-line'
-              }`}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
+        <PanelTabs options={months} value={selectedMonth} onChange={setSelectedMonth} label="Filtrer par Mois" />
       </div>
 
       {/* Row 1: Area Chart (Full Width) */}
-      <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-line p-4 sm:p-6 lg:p-8 shadow-lg">
-        <div className="flex items-center gap-2 mb-6">
-          <TrendingUp className="w-5 h-5 text-[#5B7AA0]" />
-          <h2 className="text-sm font-bold uppercase tracking-widest text-white">Évolution des interventions (12 Mois)</h2>
-        </div>
+      <PanelFrame icon={TrendingUp} title="Évolution des interventions (12 Mois)">
         <div className="h-[350px]">
           <MonoArea data={monthlyData} title="Évolution des interventions (12 Mois)" />
         </div>
-      </div>
+      </PanelFrame>
 
       {/* Row 2: Type Pie Chart & Pipe Materials Bar Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Type Distribution */}
-        <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-line p-4 sm:p-6 lg:p-8 shadow-lg">
-          <div className="flex items-center gap-2 mb-6">
-            <PieChartIcon className="w-5 h-5 text-[#5B7AA0]" />
-            <h2 className="text-sm font-bold uppercase tracking-widest text-white">Répartition par Type</h2>
-          </div>
+        <PanelFrame icon={PieChartIcon} title="Répartition par Type">
           <div>
             {typeData.length > 0 ? (
               <MonoDonut data={typeData} title="Répartition par Type" />
@@ -291,14 +327,10 @@ export const StatisticsView = ({ dataList }) => {
               <div className="flex items-center justify-center h-full text-slate-500 text-sm">Aucune donnée disponible</div>
             )}
           </div>
-        </div>
+        </PanelFrame>
 
         {/* Pipe Materials */}
-        <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-line p-4 sm:p-6 lg:p-8 shadow-lg">
-          <div className="flex items-center gap-2 mb-6">
-            <BarChart3 className="w-5 h-5 text-[#5B7AA0]" />
-            <h2 className="text-sm font-bold uppercase tracking-widest text-white">Matériaux des Conduites (Fuites)</h2>
-          </div>
+        <PanelFrame icon={BarChart3} title="Matériaux des Conduites (Fuites)">
           <div>
              {pipeMaterials.length > 0 ? (
                 <MonoPillars data={pipeMaterials} title="Matériaux des Conduites (Fuites)" />
@@ -306,18 +338,14 @@ export const StatisticsView = ({ dataList }) => {
                 <div className="flex items-center justify-center h-full text-slate-500 text-sm">Aucune donnée disponible</div>
              )}
           </div>
-        </div>
+        </PanelFrame>
       </div>
 
       {/* Row 3: Origins & Flow Rates */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
         {/* Consumed Materials */}
-        <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-line p-4 sm:p-6 lg:p-8 shadow-lg">
-          <div className="flex items-center gap-2 mb-6">
-            <Wrench className="w-5 h-5 text-[#5B7AA0]" />
-            <h2 className="text-sm font-bold uppercase tracking-widest text-white">Matériels Consommés</h2>
-          </div>
+        <PanelFrame icon={Wrench} title="Matériels Consommés">
           <div>
              {consumedMaterials.length > 0 ? (
                 <MonoPillars data={consumedMaterials} title="Matériels Consommés" />
@@ -325,14 +353,10 @@ export const StatisticsView = ({ dataList }) => {
                 <div className="flex items-center justify-center h-full text-slate-500 text-sm">Aucune donnée disponible</div>
              )}
           </div>
-        </div>
+        </PanelFrame>
 
         {/* Flow Rates (Débit) */}
-        <div className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-line p-4 sm:p-6 lg:p-8 shadow-lg">
-          <div className="flex items-center gap-2 mb-6">
-            <Activity className="w-5 h-5 text-[#5B7AA0]" />
-            <h2 className="text-sm font-bold uppercase tracking-widest text-white">Répartition par Débit</h2>
-          </div>
+        <PanelFrame icon={Activity} title="Répartition par Débit">
           <div>
              {debitData.length > 0 ? (
                 <MonoDonut data={debitData} title="Répartition par Débit" />
@@ -340,7 +364,7 @@ export const StatisticsView = ({ dataList }) => {
                 <div className="flex items-center justify-center h-full text-slate-500 text-sm">Aucune donnée disponible</div>
              )}
           </div>
-        </div>
+        </PanelFrame>
       </div>
     </Motion.div>
   );

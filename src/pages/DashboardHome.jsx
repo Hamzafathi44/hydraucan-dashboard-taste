@@ -1,5 +1,6 @@
-import { Calendar as CalendarIcon, PieChart as PieChartIcon, Activity, BarChart3 } from 'lucide-react';
-import { motion as Motion } from 'motion/react';
+import { useEffect, useState } from 'react';
+import { Calendar as CalendarIcon, PieChart as PieChartIcon, Activity, BarChart3, FileText, TrendingUp, Clock } from 'lucide-react';
+import { motion as Motion, animate } from 'motion/react';
 
 // Taste Skill v2, app sheet framed-sheet: the dashboard is an app
 // screen, not a landing page. KPIs are type in one container split
@@ -16,7 +17,43 @@ import { motion as Motion } from 'motion/react';
 // only). No Amicro code was copied verbatim — these are original
 // SVG components written in that style. Amicro itself is MIT
 // licensed; see amicro.dev. No new dependencies were added.
+//
+// PanelUI Batch 1 (copy only): the KPI strip below is replaced by
+// PanelUI-Web-style KPI panels (icon + French title, animated
+// value, breakdown caption). PanelUI Web (panelui.dev) is MIT
+// licensed; this is structure/style inspiration only, not a
+// verbatim copy of PanelUI code, written in .jsx with only
+// dependencies already in package.json (motion, lucide-react).
+// No new KPI, trend, or previous-month figure is introduced here.
 const NAVY_SHADES = ['#16294D', '#2E4A73', '#5B7AA0', '#8AA0BC', '#C2D0E0'];
+
+// Fallback icons, matching exactly the icons useDashboardData
+// already attaches to each stat (FileText / TrendingUp / Clock).
+// Used only if a stat arrives without its icon field.
+const FALLBACK_KPI_ICONS = {
+  'Total des Rapports': FileText,
+  'Ce Mois': TrendingUp,
+  'Dernière Entrée': Clock
+};
+
+// Rolling Number in the PanelUI Web style: a numeric value counts
+// up once on mount (or when it changes) via motion, with no loop.
+// Non-numeric values (e.g. the "Dernière Entrée" date string) are
+// rendered exactly as passed in, never forced into a number.
+const RollingNumber = ({ value }) => {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    if (typeof value !== 'number') return undefined;
+    const controls = animate(0, value, {
+      duration: 0.9,
+      ease: 'easeOut',
+      onUpdate: (v) => setDisplay(Math.round(v))
+    });
+    return () => controls.stop();
+  }, [value]);
+  if (typeof value !== 'number') return <span>{value}</span>;
+  return <span>{display}</span>;
+};
 
 export const DashboardHome = ({ stats, dataList, chartData }) => {
   // Work-per-day computation, copied exactly from the previous
@@ -76,21 +113,36 @@ export const DashboardHome = ({ stats, dataList, chartData }) => {
         <p className="text-sm text-slate-500 mt-1">Mois en cours · Travaux hydrauliques, Fquih Ben Salah.</p>
       </header>
 
-      {/* Monthly overview: one KPI strip, not four tiles */}
-      <div className="kpi-strip">
-        {stats.map((stat) => (
-          <div key={stat.label} className="kpi-cell">
-            <span className="text-sm text-slate-500">{stat.label}</span>
-            <span className="text-2xl font-semibold text-slate-900 tabular-nums">{stat.value}</span>
-            {stat.breakdown && (
-              <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 tabular-nums">
-                <span>RNVL: {stat.breakdown.RNVL || 0}</span>
-                <span>FUITE: {stat.breakdown.FUITE || 0}</span>
-                <span>F. SP: {stat.breakdown['F. SP'] || 0}</span>
+      {/* PanelUI Batch 1: KPI panels in place of the old KPI strip.
+          One panel per stat already passed in, same labels, values
+          and breakdowns. No trend line is shown: this file computes
+          no previous-period comparison for these KPIs (the
+          "Évolution vs mois précédent" column below belongs to the
+          per-nature table, not to these totals), so no trend is
+          invented. The breakdown rows are the existing captions. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {stats.map((stat) => {
+          const Icon = stat.icon || FALLBACK_KPI_ICONS[stat.label];
+          const isNumeric = typeof stat.value === 'number';
+          return (
+            <div key={stat.label} className="bg-white rounded-xl border border-line p-5">
+              <div className="flex items-center gap-2">
+                {Icon ? <Icon className="w-4 h-4 text-[#16294D]" /> : null}
+                <span className="text-sm text-slate-500">{stat.label}</span>
               </div>
-            )}
-          </div>
-        ))}
+              <span className={`mt-2 block font-semibold text-slate-900 tabular-nums ${isNumeric ? 'text-3xl' : 'text-2xl'}`}>
+                <RollingNumber value={stat.value} />
+              </span>
+              {stat.breakdown && (
+                <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 tabular-nums">
+                  <span>RNVL: {stat.breakdown.RNVL || 0}</span>
+                  <span>FUITE: {stat.breakdown.FUITE || 0}</span>
+                  <span>F. SP: {stat.breakdown['F. SP'] || 0}</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
