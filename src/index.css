@@ -31,6 +31,20 @@
     @apply w-[240px] max-w-[86vw] bg-sidebar p-5 sm:p-6 flex flex-col gap-6 fixed lg:sticky top-0 h-[100dvh] z-50 transition-transform duration-300 ease-in-out overflow-y-auto;
   }
 
+  /* Batch 1 — Amicro-compatible mono sidebar/top bar (style only).
+     Every sidebar and top-bar icon keeps one thin stroke (1.5) and
+     one colour: slate-400 when inactive, Hydraucan navy #16294D
+     when active. No coloured chips, no rainbow, no emoji. The
+     motion spring itself lives on the nav buttons in
+     DashboardLayout.jsx (hover/tap only, no page entrance). */
+  .sidebar svg,
+  .dashboard-layout header svg {
+    stroke-width: 1.5;
+  }
+  .mono-nav-item svg {
+    stroke-width: 1.5;
+  }
+
   /* White sheet: butts against the sidebar/top bar, inset 8px from
      the right and bottom edges, 16px radius, 1px edge, no shadow. */
   .main-content {

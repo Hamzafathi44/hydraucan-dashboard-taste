@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { motion as Motion } from 'motion/react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 import {
@@ -49,6 +50,14 @@ const VIEW_TITLES = {
 // the work on a white sheet inset 8px from the right/bottom edges,
 // 1px edge, no shadow. Active nav is a neutral grey pill, not a
 // coloured bar. No logic changes here, only the shell.
+//
+// Batch 1 — Amicro-compatible mono sidebar (style inspiration only):
+// Amicro (amicro.dev, MIT) has no sidebar primitive and no Amicro
+// code is copied here. Its Mono style is followed locally instead:
+// lucide icons in one colour only (slate-400 inactive, navy #16294D
+// active), stroke-width 1.5, no coloured chips, no rainbow, no emoji,
+// and a subtle spring press/hover via motion/react. No entrance
+// animation is added for the whole page.
 export const DashboardLayout = ({ children, activeView, setActiveView, theme, onToggleTheme }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const go = (view) => { setActiveView(view); setIsMobileMenuOpen(false); };
@@ -66,12 +75,12 @@ export const DashboardLayout = ({ children, activeView, setActiveView, theme, on
         <div className="flex items-center justify-between">
           <img src="/logo-hydracane.png" alt="HYDRAUCAN" className="h-12 w-auto object-contain" referrerPolicy="no-referrer" />
           <button aria-label="Fermer le menu" onClick={() => setIsMobileMenuOpen(false)} className="lg:hidden p-2.5 text-slate-500 hover:text-slate-900 bg-slate-200/60 rounded-lg">
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" strokeWidth={1.5} />
           </button>
         </div>
 
         <div className="flex items-center gap-2 rounded-lg bg-white border border-line px-3 py-2.5">
-          <ShieldCheck className="w-5 h-5 text-[#16294D] shrink-0" />
+          <ShieldCheck className="w-5 h-5 text-[#16294D] shrink-0" strokeWidth={1.5} />
           <div>
             <p className="text-xs font-semibold text-slate-900 leading-tight">Espace employés</p>
             <p className="text-[11px] text-slate-500 leading-tight">Accès réservé · Hydraucan</p>
@@ -84,14 +93,17 @@ export const DashboardLayout = ({ children, activeView, setActiveView, theme, on
               <p className="px-3 mb-2 text-xs font-medium text-slate-500">{group.label}</p>
               <div className="space-y-1">
                 {group.items.map(([view, Icon, label]) => (
-                  <button
+                  <Motion.button
                     key={view}
                     onClick={() => go(view)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-all ${activeView === view ? 'bg-[#E2E6EA] text-slate-900' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'}`}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                    className={`mono-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeView === view ? 'bg-[#E2E6EA] text-slate-900' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'}`}
                   >
-                    <Icon className={`w-5 h-5 shrink-0 ${activeView === view ? 'text-[#16294D]' : 'text-slate-400'}`} />
+                    <Icon className={`w-5 h-5 shrink-0 ${activeView === view ? 'text-[#16294D]' : 'text-slate-400'}`} strokeWidth={1.5} />
                     {label}
-                  </button>
+                  </Motion.button>
                 ))}
               </div>
             </div>
@@ -99,10 +111,16 @@ export const DashboardLayout = ({ children, activeView, setActiveView, theme, on
         </nav>
 
         <div className="pt-4 border-t border-slate-300/60">
-          <button onClick={() => signOut(auth)} className="w-full flex items-center gap-3 px-3 py-2.5 text-red-700 hover:text-red-800 hover:bg-red-500/10 rounded-lg font-medium text-sm transition-all">
-            <LogOut className="w-5 h-5" />
+          <Motion.button
+            onClick={() => signOut(auth)}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            className="mono-nav-item w-full flex items-center gap-3 px-3 py-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-lg font-medium text-sm transition-colors"
+          >
+            <LogOut className="w-5 h-5 text-slate-400" strokeWidth={1.5} />
             Déconnexion
-          </button>
+          </Motion.button>
         </div>
       </aside>
 
@@ -114,11 +132,11 @@ export const DashboardLayout = ({ children, activeView, setActiveView, theme, on
               aria-label="Ouvrir le menu"
               className="lg:hidden p-2 bg-white border border-line rounded-lg text-slate-700"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-5 h-5" strokeWidth={1.5} />
             </button>
             <p className="text-xs font-medium text-slate-500">Hydraucan · Interne</p>
             <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white border border-line px-3 py-1 text-[11px] font-medium text-slate-600">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" /> Employés uniquement
+              <span className="w-1.5 h-1.5 rounded-full bg-[#16294D]" /> Employés uniquement
             </span>
           </div>
           {onToggleTheme && (
