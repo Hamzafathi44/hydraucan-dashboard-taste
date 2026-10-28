@@ -8,6 +8,7 @@ import { AnimatePresence } from 'motion/react';
 // Hooks & Layouts
 import { useDashboardData } from './hooks/useDashboardData';
 import { DashboardLayout } from './layouts/DashboardLayout';
+import { ACCENTS, getAccent } from './lib/accent';
 
 // View Pages
 import { DashboardHome } from './pages/DashboardHome';
@@ -22,17 +23,36 @@ import { EnveloppeFinanciereView } from './pages/EnveloppeFinanciereView';
 // استيراد مكون استيراد الإكسل الجديد
 import SRMExcelImporter from './components/SRMExcelImporter';
 
-const AuthenticatedApp = ({ user, activeView, setActiveView, theme, onToggleTheme }) => {
+const AccentPicker = ({ accent, onAccentChange }) => (
+  <span className="inline-flex items-center gap-1.5" role="group" aria-label="Couleur du thème">
+    {ACCENTS.map((a) => (
+      <button
+        key={a.id}
+        type="button"
+        title={a.name}
+        aria-label={`Thème ${a.name}`}
+        aria-pressed={accent === a.id}
+        onClick={() => onAccentChange(a.id)}
+        className={`w-5 h-5 rounded-full border-2 transition ${accent === a.id ? 'border-slate-900 scale-110' : 'border-white/60 hover:scale-110'}`}
+        style={{ backgroundColor: a.light }}
+      />
+    ))}
+  </span>
+);
+
+const AuthenticatedApp = ({ user, activeView, setActiveView, theme, onToggleTheme, accent, onAccentChange }) => {
   const dashboardData = useDashboardData(user);
 
   return (
-    <DashboardLayout activeView={activeView} setActiveView={setActiveView} theme={theme} onToggleTheme={onToggleTheme}>
+    <DashboardLayout activeView={activeView} setActiveView={setActiveView} theme={theme} onToggleTheme={onToggleTheme} accent={accent} onAccentChange={onAccentChange}>
       <AnimatePresence mode="wait">
         {activeView === 'home' && (
-          <DashboardHome 
-            stats={dashboardData.stats} 
-            dataList={dashboardData.dataList} 
-            chartData={dashboardData.chartData} 
+          <DashboardHome
+            stats={dashboardData.stats}
+            dataList={dashboardData.dataList}
+            chartData={dashboardData.chartData}
+            theme={theme}
+            accent={accent}
           />
         )}
         {activeView === 'pointage' && (
@@ -47,7 +67,7 @@ const AuthenticatedApp = ({ user, activeView, setActiveView, theme, onToggleThem
           <RefectionView />
         )}
         {activeView === 'statistics' && (
-          <StatisticsView dataList={dashboardData.dataList} />
+          <StatisticsView dataList={dashboardData.dataList} theme={theme} accent={accent} />
         )}
         {activeView === 'fichier' && (
           <FichierExploitationEauView user={user} {...dashboardData} />
@@ -84,11 +104,19 @@ function App() {
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('hydraucan-theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
   });
+  const [accent, setAccent] = useState(() => {
+    try { return getAccent(localStorage.getItem('hydraucan-accent')).id; } catch { return 'navy'; }
+  });
 
   useEffect(() => {
     document.documentElement.classList.toggle('theme-dark', theme === 'dark');
     try { localStorage.setItem('hydraucan-theme', theme); } catch {}
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.dataset.accent = accent;
+    try { localStorage.setItem('hydraucan-accent', accent); } catch {}
+  }, [accent]);
 
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
 
@@ -115,6 +143,7 @@ function App() {
           <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
             <img src="/logo-hydracane.png" alt="HYDRAUCAN" className="h-10 w-auto object-contain brightness-200" />
             <div className="flex items-center gap-3">
+              <AccentPicker accent={accent} onAccentChange={setAccent} />
               <button onClick={toggleTheme} aria-label="Changer de thème" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/20 px-3 py-1 text-[11px] font-bold hover:bg-white/20 transition">
                 {theme === 'dark' ? 'Clair' : 'Sombre'}
               </button>
@@ -138,7 +167,7 @@ function App() {
   return (
     <>
       <Toaster position="top-right" richColors />
-      <AuthenticatedApp user={user} activeView={activeView} setActiveView={setActiveView} theme={theme} onToggleTheme={toggleTheme} />
+      <AuthenticatedApp user={user} activeView={activeView} setActiveView={setActiveView} theme={theme} onToggleTheme={toggleTheme} accent={accent} onAccentChange={setAccent} />
     </>
   );
 }
