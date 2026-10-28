@@ -40,7 +40,12 @@ const AccentPicker = ({ accent, onAccentChange }) => (
   </span>
 );
 
-const EXEMPT_VIEWS = ['refection', 'enveloppe'];
+// Theme exemption, updated 2026-10-28: Réfection's exemption was
+// removed at Michael's request, so Réfection now follows the
+// chosen accent and light/dark mode like every other view.
+// Enveloppe financière stays exempt (light + navy, "Thème
+// d'origine" badge) — only its exemption remains.
+const EXEMPT_VIEWS = ['enveloppe'];
 
 // Transitions Batch 1 (copy only): page side-by-side, in the
 // transitions.dev "page side-by-side" style — rebuilt locally with
