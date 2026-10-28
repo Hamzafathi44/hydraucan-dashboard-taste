@@ -3,7 +3,7 @@ import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { LoginForm } from './components/LoginForm';
 import { Toaster } from 'sonner';
-import { AnimatePresence, motion as Motion } from 'motion/react';
+import { AnimatePresence, motion as Motion, useReducedMotion } from 'motion/react';
 
 // Hooks & Layouts
 import { useDashboardData } from './hooks/useDashboardData';
@@ -52,18 +52,24 @@ const EXEMPT_VIEWS = ['refection', 'enveloppe'];
 // moving back, with a short blur fade, 0.35s. No view, data or route
 // is changed; Réfection and Enveloppe views themselves are untouched.
 const VIEW_ORDER = ['home', 'pointage', 'rapport', 'refection', 'statistics', 'fichier', 'srm-excel', 'enveloppe', 'settings'];
-const PageTransition = ({ viewKey, direction, children }) => (
-  <Motion.div
-    key={viewKey}
-    initial={{ opacity: 0, x: direction * 28, filter: 'blur(4px)' }}
-    animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-    exit={{ opacity: 0, x: direction * -28, filter: 'blur(4px)' }}
-    transition={{ duration: 0.35, ease: 'easeOut' }}
-    className="min-w-0"
-  >
-    {children}
-  </Motion.div>
-);
+const PageTransition = ({ viewKey, direction, children }) => {
+  const shouldReduceMotion = useReducedMotion();
+  if (shouldReduceMotion) {
+    return <div className="min-w-0">{children}</div>;
+  }
+  return (
+    <Motion.div
+      key={viewKey}
+      initial={{ opacity: 0, x: direction * 28, filter: 'blur(4px)' }}
+      animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+      exit={{ opacity: 0, x: direction * -28, filter: 'blur(4px)' }}
+      transition={{ duration: 0.22, ease: 'easeOut' }}
+      className="min-w-0"
+    >
+      {children}
+    </Motion.div>
+  );
+};
 
 const AuthenticatedApp = ({ user, activeView, setActiveView, theme, onToggleTheme, accent, onAccentChange, isThemeExempt, effectiveTheme, effectiveAccent }) => {
   const dashboardData = useDashboardData(user);
@@ -262,7 +268,7 @@ function App() {
   }
 
   return (
-    <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4, ease: 'easeOut' }}>
+    <Motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: 'easeOut' }}>
       <Toaster position="top-right" richColors />
       <AuthenticatedApp user={user} activeView={activeView} setActiveView={setActiveView} theme={theme} onToggleTheme={toggleTheme} accent={accent} onAccentChange={setAccent} isThemeExempt={isThemeExempt} effectiveTheme={effectiveTheme} effectiveAccent={effectiveAccent} />
     </Motion.div>

@@ -150,7 +150,7 @@ const PanelFrame = ({ icon: Icon, title, children, footer, delay = 0 }) => (
   <Motion.section
     initial={{ opacity: 0, y: 14 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.4, delay, ease: 'easeOut' }}
+    transition={{ duration: 0.3, delay, ease: 'easeOut' }}
     className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-line p-4 sm:p-6 lg:p-8 shadow-lg"
   >
     <header className="mb-6 flex items-center gap-2">
@@ -319,9 +319,9 @@ export const StatisticsView = ({ dataList, theme = 'light', accent = 'navy' }) =
   return (
     <Motion.div
       key="statistics"
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       className="space-y-8"
     >
       <header className="mb-4">

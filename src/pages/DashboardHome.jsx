@@ -55,7 +55,7 @@ const SpinningDigit = ({ digit, index }) => (
       className="block"
       style={{
         transform: `translateY(calc(-${digit} * 1em))`,
-        transition: `transform 0.9s cubic-bezier(0.22, 1, 0.36, 1) ${index * 0.08}s`,
+        transition: `transform 0.55s var(--ease-out) ${index * 0.05}s`,
         lineHeight: 1
       }}
     >
@@ -187,11 +187,17 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
           per-nature table, not to these totals), so no trend is
           invented. The breakdown rows are the existing captions. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {stats.map((stat) => {
+        {stats.map((stat, statIndex) => {
           const Icon = stat.icon || FALLBACK_KPI_ICONS[stat.label];
           const isNumeric = typeof stat.value === 'number';
           return (
-            <div key={stat.label} className="bg-white rounded-xl border border-line p-5">
+            <Motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: statIndex * 0.05, ease: 'easeOut' }}
+              className="bg-white rounded-xl border border-line p-5"
+            >
               <div className="flex items-center gap-2">
                 {Icon ? <Icon className="w-4 h-4 text-accent" /> : null}
                 <span className="text-sm text-slate-500">{stat.label}</span>
@@ -206,7 +212,7 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
                   <span>F. SP: {stat.breakdown['F. SP'] || 0}</span>
                 </div>
               )}
-            </div>
+            </Motion.div>
           );
         })}
       </div>
@@ -261,7 +267,7 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
                       fill={NAVY_SHADES[shadeIndex]}
                       initial={{ scaleY: 0 }}
                       animate={{ scaleY: 1 }}
-                      transition={{ type: 'spring', stiffness: 120, damping: 20, delay: i * 0.01 }}
+                      transition={{ type: 'spring', stiffness: 120, damping: 20, delay: i * 0.005 }}
                       style={{ transformBox: 'fill-box', transformOrigin: 'bottom' }}
                     >
                       <title>{`Jour ${entry.day} : ${entry.count} travaux`}</title>
