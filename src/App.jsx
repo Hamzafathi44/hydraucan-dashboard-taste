@@ -99,10 +99,26 @@ const AuthenticatedApp = ({ user, activeView, setActiveView, theme, onToggleThem
   );
 };
 
+const KNOWN_VIEWS = ['home', 'pointage', 'rapport', 'refection', 'statistics', 'fichier', 'srm-excel', 'enveloppe', 'settings'];
+
 function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [activeView, setActiveView] = useState('home');
+  // Refresh fix (copy only, also applied to original): the active view
+  // used to live only in React state, so a refresh always reset it to
+  // 'home'. It is now saved in localStorage on every change and
+  // restored on load (invalid values fall back to 'home'), so a
+  // refresh on Réfection stays on Réfection — and the same holds for
+  // every other view. No view file, data or route was changed.
+  const [activeView, setActiveView] = useState(() => {
+    try {
+      const saved = localStorage.getItem('hydraucan-active-view');
+      return KNOWN_VIEWS.includes(saved) ? saved : 'home';
+    } catch { return 'home'; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('hydraucan-active-view', activeView); } catch {}
+  }, [activeView]);
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('hydraucan-theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
   });
