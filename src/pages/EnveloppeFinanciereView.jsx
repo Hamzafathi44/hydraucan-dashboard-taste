@@ -49,13 +49,26 @@ const uploadProofToCloudinary = async (dataUrl, rowId, field) => {
   }
 };
 
-const uploadProofImage = async (dataUrl, rowId, field) => {
+const uploadProofImage = async (dataUrl, rowId, field, ownerUid) => {
   // Missing proof field on an old report must become null, never undefined:
   // Firestore updateDoc() rejects explicit undefined values, which made
   // editing old reports fail even without a new proof.
   if (dataUrl === undefined) return null;
   if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
     return dataUrl;
+  }
+  // Security fix (copy, 2026-10-28): proof validation, applied before any
+  // upload — only images and PDFs, max ~10 MB. Defence in depth only: the
+  // real gate for Cloudinary must be the unsigned preset's own format/size
+  // limits in the Cloudinary dashboard, because anyone can call the upload
+  // API directly with the preset name from the shipped bundle.
+  const mime = dataUrl.slice(5, dataUrl.indexOf(';'));
+  const approxBytes = Math.floor((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75);
+  if (!mime.startsWith('image/') && mime !== 'application/pdf') {
+    throw new Error('Preuve refusée : seuls les images et PDF sont acceptés.');
+  }
+  if (approxBytes > 10 * 1024 * 1024) {
+    throw new Error('Preuve refusée : fichier trop volumineux (limite 10 Mo).');
   }
   // Try Cloudinary first; if it is not configured or it fails, fall
   // through to Firebase Storage below (kept for when Blaze is fixed).
@@ -67,7 +80,11 @@ const uploadProofImage = async (dataUrl, rowId, field) => {
   }
   const storage = getStorage();
   const blob = await fetch(dataUrl).then((r) => r.blob());
-  const path = `enveloppe_preuves/${Date.now()}-${Math.random().toString(36).slice(2)}/${rowId}-${field}.jpg`;
+  // Security fix (copy, 2026-10-28): Firebase Storage proofs are stored
+  // under the owner's uid, matching the per-user Storage rules, instead of
+  // a flat shared folder any authenticated user could read or delete.
+  const ownerFolder = ownerUid || 'legacy';
+  const path = `enveloppe_preuves/${ownerFolder}/${Date.now()}-${Math.random().toString(36).slice(2)}/${rowId}-${field}.jpg`;
   // Never hang forever on a slow / blocked upload: fail fast after 20s
   // so the user gets a real error instead of a stuck "Sauvegarde..." button.
   // The underlying upload error is also logged, because a timeout usually
@@ -105,7 +122,7 @@ const cleanRowForSave = (row) => {
 // keeping the base64 proofs ONLY when the whole document stays under
 // ~850 KB, so a small edit still saves. Large reports still need Storage,
 // and then the real Storage error is thrown.
-const prepareRowsForSave = async (rowsToSave, headerForSave, onProgress) => {
+const prepareRowsForSave = async (rowsToSave, headerForSave, onProgress, ownerUid) => {
   const jobs = [];
   rowsToSave.forEach((row, rowIndex) => {
     PROOF_FIELDS.forEach((field) => {
@@ -124,7 +141,8 @@ const prepareRowsForSave = async (rowsToSave, headerForSave, onProgress) => {
         results[job.rowIndex][job.field] = await uploadProofImage(
           rowsToSave[job.rowIndex][job.field],
           rowsToSave[job.rowIndex].id,
-          job.field
+          job.field,
+          ownerUid
         );
       } catch (e) {
         if (!firstError) firstError = e;
@@ -146,8 +164,8 @@ const prepareRowsForSave = async (rowsToSave, headerForSave, onProgress) => {
   return results;
 };
 
-export const EnveloppeFinanciereView = () => {
-  const { reports, loading, addReport, updateReport, deleteReport } = useEnveloppes();
+export const EnveloppeFinanciereView = ({ user }) => {
+  const { reports, loading, addReport, updateReport, deleteReport } = useEnveloppes(user);
   
   const [saving, setSaving] = useState(false);
   const [uploadingProofs, setUploadingProofs] = useState(0);
@@ -215,7 +233,7 @@ export const EnveloppeFinanciereView = () => {
       // falls back to base64 instead of failing the save.
       const rowsToSave = await prepareRowsForSave(rows, header, (done, total) => {
         setSaveProgress(total > 0 ? `${done}/${total} preuves` : '');
-      });
+      }, user?.uid);
       let result;
       if (editingId) {
         result = await updateReport(editingId, { header, rows: rowsToSave });

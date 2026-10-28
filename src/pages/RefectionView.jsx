@@ -11,8 +11,8 @@ const NATURES = [
   'argile', 'Béton', 'Pavé', 'Goudron', 'Faience', 'Revsol'
 ];
 
-export const RefectionView = () => {
-  const { refections, loading, addRefection, updateRefection, deleteRefection } = useRefections();
+export const RefectionView = ({ user }) => {
+  const { refections, loading, addRefection, updateRefection, deleteRefection } = useRefections(user);
 
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');

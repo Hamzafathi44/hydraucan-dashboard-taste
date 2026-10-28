@@ -110,7 +110,7 @@ const AuthenticatedApp = ({ user, activeView, setActiveView, theme, onToggleThem
         )}
         {activeView === 'refection' && (
           <PageTransition key="refection" viewKey="refection" direction={direction}>
-            <RefectionView />
+            <RefectionView user={user} />
           </PageTransition>
         )}
         {activeView === 'statistics' && (
@@ -135,7 +135,7 @@ const AuthenticatedApp = ({ user, activeView, setActiveView, theme, onToggleThem
         {/* Enveloppe block: outside the srm-excel block */}
         {activeView === 'enveloppe' && (
           <PageTransition key="enveloppe" viewKey="enveloppe" direction={direction}>
-            <EnveloppeFinanciereView />
+            <EnveloppeFinanciereView user={user} />
           </PageTransition>
         )}
 
