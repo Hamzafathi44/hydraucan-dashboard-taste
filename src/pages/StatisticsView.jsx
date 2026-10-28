@@ -141,8 +141,18 @@ const MonoArea = ({ data, title, palette = ['#16294D', '#2E4A73', '#5B7AA0', '#8
 // surface in light mode (via the existing light-theme overrides for
 // bg-slate-900/40 in src/index.css), consistent padding, mono navy icon.
 // Presentation only — it never touches the chart data it wraps.
-const PanelFrame = ({ icon: Icon, title, children, footer }) => (
-  <section className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-line p-4 sm:p-6 lg:p-8 shadow-lg">
+// Transitions Batch 3 (copy only): panel reveal, in the
+// transitions.dev "panel reveal" style — rebuilt locally with
+// motion. Each statistics panel fades and rises in, staggered by
+// its delay, when the view mounts. Presentation only; the chart
+// data inside each panel is unchanged.
+const PanelFrame = ({ icon: Icon, title, children, footer, delay = 0 }) => (
+  <Motion.section
+    initial={{ opacity: 0, y: 14 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4, delay, ease: 'easeOut' }}
+    className="bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-line p-4 sm:p-6 lg:p-8 shadow-lg"
+  >
     <header className="mb-6 flex items-center gap-2">
       <Icon className="w-5 h-5 text-[#5B7AA0]" />
       <h2 className="text-sm font-bold uppercase tracking-widest text-white">{title}</h2>
@@ -151,7 +161,7 @@ const PanelFrame = ({ icon: Icon, title, children, footer }) => (
     {footer ? (
       <footer className="mt-6 border-t border-line pt-4 text-xs text-slate-400 tabular-nums">{footer}</footer>
     ) : null}
-  </section>
+  </Motion.section>
 );
 
 // VibePrompt Batch 4 (copy only): empty state, in the VibePrompt
@@ -330,7 +340,7 @@ export const StatisticsView = ({ dataList, theme = 'light', accent = 'navy' }) =
 
       {/* Row 1: Area Chart (Full Width) — VibePrompt Batch 3: chart
           card legend footer, built from the same monthly totals. */}
-      <PanelFrame icon={TrendingUp} title="Évolution des interventions (12 Mois)" footer={`Total sur 12 mois : ${monthlyData.reduce((s, m) => s + m.count, 0)} interventions`}>
+      <PanelFrame icon={TrendingUp} title="Évolution des interventions (12 Mois)" delay={0} footer={`Total sur 12 mois : ${monthlyData.reduce((s, m) => s + m.count, 0)} interventions`}>
         <div className="h-[350px]">
           <MonoArea data={monthlyData} palette={MONO} title="Évolution des interventions (12 Mois)" />
         </div>
@@ -339,7 +349,7 @@ export const StatisticsView = ({ dataList, theme = 'light', accent = 'navy' }) =
       {/* Row 2: Type Pie Chart & Pipe Materials Bar Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Type Distribution */}
-        <PanelFrame icon={PieChartIcon} title="Répartition par Type" footer={`Total : ${typeData.reduce((s, d) => s + d.value, 0)} interventions`}>
+        <PanelFrame icon={PieChartIcon} title="Répartition par Type" delay={0.05} footer={`Total : ${typeData.reduce((s, d) => s + d.value, 0)} interventions`}>
           <div>
             {typeData.length > 0 ? (
               <MonoDonut data={typeData} palette={MONO} title="Répartition par Type" />
@@ -350,7 +360,7 @@ export const StatisticsView = ({ dataList, theme = 'light', accent = 'navy' }) =
         </PanelFrame>
 
         {/* Pipe Materials */}
-        <PanelFrame icon={BarChart3} title="Matériaux des Conduites (Fuites)" footer={`Total : ${pipeMaterials.reduce((s, d) => s + d.value, 0)} fuites`}>
+        <PanelFrame icon={BarChart3} title="Matériaux des Conduites (Fuites)" delay={0.1} footer={`Total : ${pipeMaterials.reduce((s, d) => s + d.value, 0)} fuites`}>
           <div>
              {pipeMaterials.length > 0 ? (
                 <MonoPillars data={pipeMaterials} palette={MONO} title="Matériaux des Conduites (Fuites)" />
@@ -365,7 +375,7 @@ export const StatisticsView = ({ dataList, theme = 'light', accent = 'navy' }) =
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
         {/* Consumed Materials */}
-        <PanelFrame icon={Wrench} title="Matériels Consommés" footer={`${consumedMaterials.length} matériaux affichés (top 8)`}>
+        <PanelFrame icon={Wrench} title="Matériels Consommés" delay={0.15} footer={`${consumedMaterials.length} matériaux affichés (top 8)`}>
           <div>
              {consumedMaterials.length > 0 ? (
                 <MonoPillars data={consumedMaterials} palette={MONO} title="Matériels Consommés" />
@@ -376,7 +386,7 @@ export const StatisticsView = ({ dataList, theme = 'light', accent = 'navy' }) =
         </PanelFrame>
 
         {/* Flow Rates (Débit) */}
-        <PanelFrame icon={Activity} title="Répartition par Débit" footer={`Total : ${debitData.reduce((s, d) => s + d.value, 0)} interventions`}>
+        <PanelFrame icon={Activity} title="Répartition par Débit" delay={0.2} footer={`Total : ${debitData.reduce((s, d) => s + d.value, 0)} interventions`}>
           <div>
              {debitData.length > 0 ? (
                 <MonoDonut data={debitData} palette={MONO} title="Répartition par Débit" />

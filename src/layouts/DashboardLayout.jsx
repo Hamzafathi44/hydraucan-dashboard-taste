@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { motion as Motion } from 'motion/react';
+import { motion as Motion, AnimatePresence } from 'motion/react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 import {
@@ -191,7 +191,23 @@ export const DashboardLayout = ({ children, activeView, setActiveView, theme, on
         <main className={"main-content " + (isThemeExempt ? "theme-exempt" : "")}>
           {activeView !== 'home' && (
             <div className="mb-6">
-              <h2 className="text-2xl font-semibold text-slate-900 leading-tight">{VIEW_TITLES[activeView] || 'Tableau de bord'}</h2>
+              {/* Transitions Batch 4 (copy only): text states swap,
+                  in the transitions.dev "text states swap" style —
+                  rebuilt locally. The page title blurs and fades
+                  out, then the new title blurs in, on every view
+                  change. Presentation only. */}
+              <AnimatePresence mode="wait">
+                <Motion.h2
+                  key={activeView}
+                  initial={{ opacity: 0, filter: 'blur(4px)', y: 6 }}
+                  animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+                  exit={{ opacity: 0, filter: 'blur(4px)', y: -6 }}
+                  transition={{ duration: 0.25, ease: 'easeOut' }}
+                  className="text-2xl font-semibold text-slate-900 leading-tight"
+                >
+                  {VIEW_TITLES[activeView] || 'Tableau de bord'}
+                </Motion.h2>
+              </AnimatePresence>
             </div>
           )}
           {children}

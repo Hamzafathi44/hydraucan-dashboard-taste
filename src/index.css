@@ -59,6 +59,27 @@ html.theme-dark[data-accent="navy"] { --color-accent: #8AA0BC; }
      text hide; nav buttons centre their icons; the logo is capped
      so it cannot overflow the narrow bar. The collapsed choice is
      saved in DashboardLayout.jsx and survives a refresh. */
+  /* Transitions Batch 4 (copy only): toast open, in the
+     transitions.dev "toast open/close" style — rebuilt locally.
+     Sonner toasts (save confirmations in Réfection, Enveloppe and
+     elsewhere) rise in with a fade, a slight scale and a blur
+     that clears, instead of appearing instantly. No toast text,
+     logic or trigger is changed. */
+  [data-sonner-toast] {
+    animation: toast-in 0.35s ease-out;
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.97);
+      filter: blur(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0);
+    }
+  }
   .sidebar.sidebar-collapsed {
     width: 76px;
     padding-left: 12px;

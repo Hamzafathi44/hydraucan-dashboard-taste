@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Calendar as CalendarIcon, PieChart as PieChartIcon, Activity, BarChart3, FileText, TrendingUp, Clock, Search, ArrowUpDown } from 'lucide-react';
-import { motion as Motion, animate } from 'motion/react';
+import { motion as Motion } from 'motion/react';
 import { getChartPalette, getAccent } from '../lib/accent';
 
 // Taste Skill v2, app sheet framed-sheet: the dashboard is an app
@@ -38,23 +38,43 @@ const FALLBACK_KPI_ICONS = {
   'Dernière Entrée': Clock
 };
 
-// Rolling Number in the PanelUI Web style: a numeric value counts
-// up once on mount (or when it changes) via motion, with no loop.
-// Non-numeric values (e.g. the "Dernière Entrée" date string) are
-// rendered exactly as passed in, never forced into a number.
-const RollingNumber = ({ value }) => {
-  const [display, setDisplay] = useState(0);
-  useEffect(() => {
-    if (typeof value !== 'number') return undefined;
-    const controls = animate(0, value, {
-      duration: 0.9,
-      ease: 'easeOut',
-      onUpdate: (v) => setDisplay(Math.round(v))
-    });
-    return () => controls.stop();
-  }, [value]);
+// Transitions Batch 2 (copy only): spinning counter, in the
+// transitions.dev "spinning counter" style — rebuilt locally.
+// Each digit of a numeric KPI spins like a reel (a 0–9 strip that
+// translates to the target digit, staggered per digit) instead of
+// the previous plain count-up. Non-numeric values (e.g. the
+// "Dernière Entrée" date string) are rendered exactly as passed
+// in, never forced into a number. Same values, same labels.
+const SpinningDigit = ({ digit, index }) => (
+  <span
+    className="inline-block overflow-hidden align-bottom"
+    style={{ height: '1em', lineHeight: 1 }}
+    aria-hidden="true"
+  >
+    <span
+      className="block"
+      style={{
+        transform: `translateY(calc(-${digit} * 1em))`,
+        transition: `transform 0.9s cubic-bezier(0.22, 1, 0.36, 1) ${index * 0.08}s`,
+        lineHeight: 1
+      }}
+    >
+      {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+        <span key={d} className="block" style={{ height: '1em', lineHeight: 1 }}>{d}</span>
+      ))}
+    </span>
+  </span>
+);
+const SpinningNumber = ({ value }) => {
   if (typeof value !== 'number') return <span>{value}</span>;
-  return <span>{display}</span>;
+  const digits = String(value).split('');
+  return (
+    <span role="img" aria-label={String(value)}>
+      {digits.map((d, i) => (
+        <SpinningDigit key={i} digit={Number(d)} index={i} />
+      ))}
+    </span>
+  );
 };
 
 export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', accent = 'navy' }) => {
@@ -177,7 +197,7 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
                 <span className="text-sm text-slate-500">{stat.label}</span>
               </div>
               <span className={`mt-2 block font-semibold text-slate-900 tabular-nums ${isNumeric ? 'text-3xl' : 'text-2xl'}`}>
-                <RollingNumber value={stat.value} />
+                <SpinningNumber value={stat.value} />
               </span>
               {stat.breakdown && (
                 <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 tabular-nums">
