@@ -169,7 +169,7 @@ export const DashboardLayout = ({ children, activeView, setActiveView, theme, on
           </div>
           <div className="flex items-center gap-2">
             {isThemeExempt && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-line px-3 py-1 text-[11px] font-medium text-slate-600" title="Réfection et Enveloppe gardent le thème d'origine">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-line px-3 py-1 text-[11px] font-medium text-slate-600" title="Enveloppe garde le thème d'origine">
                 Thème d'origine
               </span>
             )}
