@@ -78,6 +78,16 @@ html.theme-dark[data-accent="navy"] { --color-accent: #8AA0BC; }
     box-shadow: 0 2px 12px rgba(22, 41, 77, 0.06);
   }
   main h1, main h2 { font-weight: 800; }
+  /* Theme exemption (copy only): Réfection and Enveloppe keep the
+     pre-theme-change sheet — 1px border, no shadow, normal headings.
+     Light/navy are already forced for these views in App.jsx, so
+     only the bolder theme-change rules need undoing here. */
+  main.theme-exempt.main-content {
+    border-width: 1px;
+    border-color: #EDEDED;
+    box-shadow: none;
+  }
+  main.theme-exempt h1, main.theme-exempt h2 { font-weight: 600; }
 
   .stat-card {
     @apply bg-white p-5 sm:p-6 rounded-xl border border-line flex flex-col gap-2;

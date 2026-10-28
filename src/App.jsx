@@ -40,11 +40,13 @@ const AccentPicker = ({ accent, onAccentChange }) => (
   </span>
 );
 
-const AuthenticatedApp = ({ user, activeView, setActiveView, theme, onToggleTheme, accent, onAccentChange }) => {
+const EXEMPT_VIEWS = ['refection', 'enveloppe'];
+
+const AuthenticatedApp = ({ user, activeView, setActiveView, theme, onToggleTheme, accent, onAccentChange, isThemeExempt, effectiveTheme, effectiveAccent }) => {
   const dashboardData = useDashboardData(user);
 
   return (
-    <DashboardLayout activeView={activeView} setActiveView={setActiveView} theme={theme} onToggleTheme={onToggleTheme} accent={accent} onAccentChange={onAccentChange}>
+    <DashboardLayout activeView={activeView} setActiveView={setActiveView} theme={effectiveTheme} onToggleTheme={isThemeExempt ? null : onToggleTheme} accent={effectiveAccent} onAccentChange={isThemeExempt ? null : onAccentChange} isThemeExempt={isThemeExempt}>
       <AnimatePresence mode="wait">
         {activeView === 'home' && (
           <DashboardHome
@@ -108,15 +110,23 @@ function App() {
     try { return getAccent(localStorage.getItem('hydraucan-accent')).id; } catch { return 'navy'; }
   });
 
+  // User's saved choices are kept even while an exempt view is shown;
+  // only what is applied to <html> is overridden there.
   useEffect(() => {
-    document.documentElement.classList.toggle('theme-dark', theme === 'dark');
     try { localStorage.setItem('hydraucan-theme', theme); } catch {}
   }, [theme]);
-
   useEffect(() => {
-    document.documentElement.dataset.accent = accent;
     try { localStorage.setItem('hydraucan-accent', accent); } catch {}
   }, [accent]);
+
+  const isThemeExempt = EXEMPT_VIEWS.includes(activeView);
+  const effectiveTheme = isThemeExempt ? 'light' : theme;
+  const effectiveAccent = isThemeExempt ? 'navy' : accent;
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('theme-dark', effectiveTheme === 'dark');
+    document.documentElement.dataset.accent = effectiveAccent;
+  }, [effectiveTheme, effectiveAccent]);
 
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
 
@@ -167,7 +177,7 @@ function App() {
   return (
     <>
       <Toaster position="top-right" richColors />
-      <AuthenticatedApp user={user} activeView={activeView} setActiveView={setActiveView} theme={theme} onToggleTheme={toggleTheme} accent={accent} onAccentChange={setAccent} />
+      <AuthenticatedApp user={user} activeView={activeView} setActiveView={setActiveView} theme={theme} onToggleTheme={toggleTheme} accent={accent} onAccentChange={setAccent} isThemeExempt={isThemeExempt} effectiveTheme={effectiveTheme} effectiveAccent={effectiveAccent} />
     </>
   );
 }

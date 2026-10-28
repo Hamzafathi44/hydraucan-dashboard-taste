@@ -21,5 +21,15 @@ All theme changes, in the copy only. The original was not touched.
 
 ## Not changed
 - No data, logic, routes, Firebase or proof-upload code changed.
-- Réfection and Enveloppe view files were not edited; only the shared
-  shell/theme around them follows the new accent, as with every page.
+- Réfection and Enveloppe view files were not edited.
+
+## Exemption: Réfection and Enveloppe
+- When the active view is Réfection or Enveloppe, the theme change is
+  completely paused for that view: App.jsx forces light mode + navy
+  accent on <html> (without overwriting the user's saved choices),
+  the top bar shows "Thème d'origine" instead of the accent picker
+  and the dark/light toggle, and the main sheet reverts to the
+  pre-theme-change 1px border, no shadow, normal headings
+  (`theme-exempt` in DashboardLayout + index.css).
+- Leaving those views restores the user's chosen accent and light/dark
+  mode immediately, with no reload and no lost setting.

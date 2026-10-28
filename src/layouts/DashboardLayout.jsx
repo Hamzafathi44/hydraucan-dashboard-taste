@@ -58,7 +58,7 @@ const VIEW_TITLES = {
 // active), stroke-width 1.5, no coloured chips, no rainbow, no emoji,
 // and a subtle spring press/hover via motion/react. No entrance
 // animation is added for the whole page.
-export const DashboardLayout = ({ children, activeView, setActiveView, theme, onToggleTheme, accent = 'navy', onAccentChange }) => {
+export const DashboardLayout = ({ children, activeView, setActiveView, theme, onToggleTheme, accent = 'navy', onAccentChange, isThemeExempt = false }) => {
   const accentList = [
     { id: 'navy', name: 'Marine', light: '#16294D' },
     { id: 'teal', name: 'Sarcelle', light: '#0F766E' },
@@ -146,7 +146,12 @@ export const DashboardLayout = ({ children, activeView, setActiveView, theme, on
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {onAccentChange && (
+            {isThemeExempt && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-line px-3 py-1 text-[11px] font-medium text-slate-600" title="Réfection et Enveloppe gardent le thème d'origine">
+                Thème d'origine
+              </span>
+            )}
+            {!isThemeExempt && onAccentChange && (
               <span className="inline-flex items-center gap-1.5" role="group" aria-label="Couleur du thème">
                 {accentList.map((a) => (
                   <button key={a.id} type="button" title={a.name} aria-label={`Thème ${a.name}`} aria-pressed={accent === a.id} onClick={() => onAccentChange(a.id)} className={`w-5 h-5 rounded-full border-2 transition ${accent === a.id ? 'border-slate-900 scale-110' : 'border-slate-300 hover:scale-110'}`} style={{ backgroundColor: a.light }} />
@@ -161,7 +166,7 @@ export const DashboardLayout = ({ children, activeView, setActiveView, theme, on
           </div>
         </header>
 
-        <main className="main-content">
+        <main className={"main-content " + (isThemeExempt ? "theme-exempt" : "")}>
           {activeView !== 'home' && (
             <div className="mb-6">
               <h2 className="text-2xl font-semibold text-slate-900 leading-tight">{VIEW_TITLES[activeView] || 'Tableau de bord'}</h2>
