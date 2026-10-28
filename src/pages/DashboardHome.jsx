@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Calendar as CalendarIcon, PieChart as PieChartIcon, Activity, BarChart3, FileText, TrendingUp, Clock } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Calendar as CalendarIcon, PieChart as PieChartIcon, Activity, BarChart3, FileText, TrendingUp, Clock, Search, ArrowUpDown } from 'lucide-react';
 import { motion as Motion, animate } from 'motion/react';
 import { getChartPalette, getAccent } from '../lib/accent';
 
@@ -94,6 +94,49 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
   const donutCircumference = 2 * Math.PI * donutRadius;
   const donutGap = 4;
   let donutCursor = 0;
+  // VibePrompt Batch 2 (copy only): data table with toolbar, in
+  // the VibePrompt "data table with toolbar" style — search input,
+  // sortable columns, row count and an empty state. No VibePrompt
+  // code is copied; the pattern is rebuilt locally, and the rows
+  // below are exactly the per-nature counts and month-over-month
+  // diffs the table already computed (moved up here so the toolbar
+  // can filter and sort them). No data or label is changed.
+  const [natureSearch, setNatureSearch] = useState('');
+  const [natureSort, setNatureSort] = useState('count');
+  const natureRows = useMemo(() => {
+    const thisMonthNatures = dataList
+      .filter(item => {
+        const d = new Date(item.date);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      })
+      .reduce((acc, curr) => {
+        acc[curr.nature] = (acc[curr.nature] || 0) + 1;
+        return acc;
+      }, {});
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthNatures = dataList
+      .filter(item => {
+        const d = new Date(item.date);
+        return d.getMonth() === lastMonth.getMonth() && d.getFullYear() === lastMonth.getFullYear();
+      })
+      .reduce((acc, curr) => {
+        acc[curr.nature] = (acc[curr.nature] || 0) + 1;
+        return acc;
+      }, {});
+    const rows = Object.entries(thisMonthNatures).map(([name, count]) => ({
+      name,
+      count,
+      diff: count - (lastMonthNatures[name] || 0)
+    }));
+    const query = natureSearch.trim().toLowerCase();
+    const filtered = query ? rows.filter(r => r.name.toLowerCase().includes(query)) : rows;
+    const sorted = [...filtered];
+    if (natureSort === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    else if (natureSort === 'diff') sorted.sort((a, b) => b.diff - a.diff);
+    else sorted.sort((a, b) => b.count - a.count);
+    return sorted;
+  }, [dataList, natureSearch, natureSort]);
+
   const donutSegments = (chartData || []).map((entry, index) => {
     const fraction = donutTotal > 0 ? (entry.value || 0) / donutTotal : 0;
     const dash = Math.max(0, fraction * donutCircumference - donutGap);
@@ -269,7 +312,11 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
                 </ul>
               </div>
             ) : (
-              <p className="text-slate-500 text-sm italic">Aucune donnée à afficher.</p>
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+                <PieChartIcon className="w-8 h-8 text-slate-400" strokeWidth={1.5} />
+                <p className="text-sm font-medium text-slate-700">Aucune donnée disponible</p>
+                <p className="text-xs text-slate-500">Aucune donnée à afficher pour le moment.</p>
+              </div>
             )}
           </div>
         </div>
@@ -316,58 +363,67 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
 
         {/* Nature Summary Table */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-line p-6">
-          <div className="flex items-center gap-2 mb-6">
-            <BarChart3 className="w-4 h-4 text-accent" />
-            <h2 className="text-sm font-semibold text-slate-900">Résumé des travaux par nature</h2>
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-accent" />
+              <h2 className="text-sm font-semibold text-slate-900">Résumé des travaux par nature</h2>
+            </div>
+            <span className="text-xs text-slate-500 tabular-nums">{natureRows.length} nature{natureRows.length > 1 ? 's' : ''}</span>
+            <div className="relative ml-auto w-full sm:w-56">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={natureSearch}
+                onChange={(e) => setNatureSearch(e.target.value)}
+                placeholder="Rechercher une nature…"
+                aria-label="Rechercher une nature"
+                className="w-full rounded-lg border border-line bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300"
+              />
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] text-left">
               <thead>
                 <tr className="border-b border-line">
-                  <th className="pb-4 text-xs font-medium text-slate-500">Nature du travail</th>
-                  <th className="pb-4 text-xs font-medium text-slate-500 text-right">Nombre</th>
-                  <th className="pb-4 text-xs font-medium text-slate-500 text-right">Évolution vs mois précédent</th>
+                  {[
+                    ['name', 'Nature du travail', 'text-left'],
+                    ['count', 'Nombre', 'text-right'],
+                    ['diff', 'Évolution vs mois précédent', 'text-right'],
+                  ].map(([key, label, align]) => (
+                    <th key={key} className={`pb-4 text-xs font-medium text-slate-500 ${align}`}>
+                      <button
+                        type="button"
+                        onClick={() => setNatureSort(key)}
+                        aria-label={`Trier par ${label}`}
+                        className={`inline-flex items-center gap-1 hover:text-slate-900 ${natureSort === key ? 'text-slate-900 font-semibold' : ''}`}
+                      >
+                        {label}
+                        <ArrowUpDown className="w-3.5 h-3.5" />
+                      </button>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {(() => {
-                  const now = new Date();
-                  const thisMonthNatures = dataList
-                    .filter(item => {
-                      const d = new Date(item.date);
-                      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-                    })
-                    .reduce((acc, curr) => {
-                      acc[curr.nature] = (acc[curr.nature] || 0) + 1;
-                      return acc;
-                    }, {});
-
-                  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                  const lastMonthNatures = dataList
-                    .filter(item => {
-                      const d = new Date(item.date);
-                      return d.getMonth() === lastMonth.getMonth() && d.getFullYear() === lastMonth.getFullYear();
-                    })
-                    .reduce((acc, curr) => {
-                      acc[curr.nature] = (acc[curr.nature] || 0) + 1;
-                    }, {});
-
-                  return Object.entries(thisMonthNatures).map(([name, count]) => {
-                    const prevCount = lastMonthNatures[name] || 0;
-                    const diff = count - prevCount;
-                    return (
-                      <tr key={name} className="group hover:bg-slate-50 transition-colors">
-                        <td className="py-4 text-sm font-medium text-slate-700">{name}</td>
-                        <td className="py-4 text-sm font-semibold text-slate-900 text-right tabular-nums">{count}</td>
-                        <td className="py-4 text-right">
-                          <span className="text-xs font-medium text-slate-500 tabular-nums">
-                            {diff >= 0 ? '+' : ''}{diff}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  });
-                })()}
+                {natureRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="py-8 text-center text-sm text-slate-500 italic">
+                      {natureSearch.trim()
+                        ? `Aucun r\u00e9sultat pour \u00ab ${natureSearch.trim()} \u00bb.`
+                        : 'Aucun travail enregistr\u00e9 ce mois-ci.'}
+                    </td>
+                  </tr>
+                ) : natureRows.map(({ name, count, diff }) => (
+                  <tr key={name} className="group hover:bg-slate-50 transition-colors">
+                    <td className="py-4 text-sm font-medium text-slate-700">{name}</td>
+                    <td className="py-4 text-sm font-semibold text-slate-900 text-right tabular-nums">{count}</td>
+                    <td className="py-4 text-right">
+                      <span className="text-xs font-medium text-slate-500 tabular-nums">
+                        {diff >= 0 ? '+' : ''}{diff}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
