@@ -198,7 +198,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
     argileQt: '', argilePrix: '', argileImg: null,
     argileType: 'Argile', argileCustomType: '',
     carburant: '', carburantImg: null,
-    autres: '', autresImg: null
+    autres: '', autresImg: null, autresType: ''
   });
 
   const resetForm = () => {
@@ -223,7 +223,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
         argileQt: r.argileQt || '', argilePrix: r.argilePrix || '', argileImg: r.argileImg ?? null,
         argileType: r.argileType || 'Argile', argileCustomType: r.argileCustomType || '',
         carburant: r.carburant || '', carburantImg: r.carburantImg ?? null,
-        autres: r.autres || '', autresImg: r.autresImg ?? null
+        autres: r.autres || '', autresImg: r.autresImg ?? null, autresType: r.autresType || ''
       }))
     );
     setEditingId(report.id);
@@ -274,20 +274,11 @@ export const EnveloppeFinanciereView = ({ user }) => {
 
   const handleHeaderChange = (e) => setHeader({ ...header, [e.target.name]: e.target.value });
   const handleRowChange = (id, field, value) => setRows(rows.map(r => r.id === id ? { ...r, [field]: value } : r));
-  // Material field (copy, 2026-10-29): a native <select> cannot be typed
-  // in, which made "Autre" unusable in practice. This is a combobox: one
-  // text field with the material list as suggestions — pick Faïence,
-  // Revsol, Pavé… or just type any other material name directly. A typed
-  // name that is not in the list is stored as a custom "Autre" value.
-  const handleMaterialChange = (id, value) => setRows(rows.map((r) => {
-    if (r.id !== id) return r;
-    if (MATERIAL_TYPES.includes(value) && value !== 'Autre') {
-      return { ...r, argileType: value, argileCustomType: '' };
-    }
-    if (value === '') return { ...r, argileType: 'Argile', argileCustomType: '' };
-    return { ...r, argileType: 'Autre', argileCustomType: value === 'Autre' ? '' : value };
-  }));
-  const materialInputValue = (row) => row.argileType === 'Autre' ? (row.argileCustomType || '') : (row.argileType || 'Argile');
+  // Material column (copy, 2026-10-29): back to a plain select list, as
+  // Michael asked — no typing box here. Free typing lives in the Autres
+  // section instead (see autresType below). argileCustomType is kept only
+  // so rows saved during the short combobox period still display their
+  // typed name via materialLabelOf.
   // Shared proof (copy, 2026-10-29): one proof image (one invoice, one
   // receipt) can cover two or three consommations, whatever their date or
   // type. Reusing copies the image reference into another slot — no
@@ -453,7 +444,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
       materialLabelOf(d),
       d.argileQt, d.argilePrix, d.argileTotal ? d.argileTotal.toFixed(2) : '',
       d.carburant,
-      d.autres,
+      d.autresType ? `${d.autresType} : ${d.autres}` : d.autres,
       d.totalLigne ? d.totalLigne.toFixed(2) : ''
     ]);
 
@@ -504,7 +495,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
       if (row.cimentImg) imagesToPrint.push({ label: 'Ciment', amount: row.cimentTotal, img: row.cimentImg, line: index + 1 });
       if (row.argileImg) imagesToPrint.push({ label: materialLabelOf(row), amount: row.argileTotal, img: row.argileImg, line: index + 1 });
       if (row.carburantImg) imagesToPrint.push({ label: 'Carburant', amount: parseFloat(row.carburant) || 0, img: row.carburantImg, line: index + 1 });
-      if (row.autresImg) imagesToPrint.push({ label: 'Autres', amount: parseFloat(row.autres) || 0, img: row.autresImg, line: index + 1 });
+      if (row.autresImg) imagesToPrint.push({ label: row.autresType || 'Autres', amount: parseFloat(row.autres) || 0, img: row.autresImg, line: index + 1 });
     });
 
     if (imagesToPrint.length > 0) {
@@ -689,17 +680,9 @@ export const EnveloppeFinanciereView = ({ user }) => {
                   </td>
 
                   <td className="p-1 border border-slate-800 align-top">
-                    <input
-                      type="text"
-                      list={`material-types-${d.id}`}
-                      value={materialInputValue(d)}
-                      onChange={(e) => handleMaterialChange(d.id, e.target.value)}
-                      placeholder="Choisir ou taper un matériau…"
-                      className={`${inputClass} !py-1.5 !text-[11px] min-w-[110px]`}
-                    />
-                    <datalist id={`material-types-${d.id}`}>
-                      {MATERIAL_TYPES.filter((t) => t !== 'Autre').map((t) => <option key={t} value={t} />)}
-                    </datalist>
+                    <select value={d.argileType || 'Argile'} onChange={(e) => handleRowChange(d.id, 'argileType', e.target.value)} className={`${inputClass} !py-1.5 !text-[11px] min-w-[95px]`}>
+                      {MATERIAL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
                   </td>
                   <td className="p-1 border border-slate-800"><input type="number" value={d.argileQt} onChange={(e) => handleRowChange(d.id, 'argileQt', e.target.value)} className={inputClass} /></td>
                   <td className="p-1 border border-slate-800"><input type="number" value={d.argilePrix} onChange={(e) => handleRowChange(d.id, 'argilePrix', e.target.value)} className={inputClass} /></td>
@@ -721,7 +704,10 @@ export const EnveloppeFinanciereView = ({ user }) => {
                     )}
                   </td>
 
-                  <td className="p-1 border border-slate-800"><input type="number" value={d.autres} onChange={(e) => handleRowChange(d.id, 'autres', e.target.value)} className={inputClass} /></td>
+                  <td className="p-1 border border-slate-800 align-top">
+                    <input type="text" value={d.autresType || ''} onChange={(e) => handleRowChange(d.id, 'autresType', e.target.value)} placeholder="Taper ce que c'est…" className={`${inputClass} !py-1.5 !text-[11px] mb-1`} />
+                    <input type="number" value={d.autres} onChange={(e) => handleRowChange(d.id, 'autres', e.target.value)} className={inputClass} />
+                  </td>
                   <td className="border border-slate-800 p-1 align-top">
                     {d.autres > 0 && (
                       d.autresImg ? (
