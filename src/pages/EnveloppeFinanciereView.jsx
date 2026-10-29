@@ -18,6 +18,32 @@ import { Wallet, FileDown, Plus, Trash2, Image as ImageIcon, X, Save, Loader2, A
 // and are migrated to Storage the next time their report is saved.
 const PROOF_FIELDS = ['cimentImg', 'argileImg', 'carburantImg', 'autresImg'];
 
+// Autres matériaux (copy, 2026-10-29): "Autres" is no longer one anonymous
+// amount per day-row. Each day-row carries a list of other materials, each
+// with its own type, amount and proof. "Autre" opens a free-text field for
+// any material not in the list.
+const AUTRES_TYPES = ['Faïence', 'Revsol', 'Pavé', 'Béton', 'Goudron', 'Lamozik', 'Carrelage', 'Autre'];
+const newAutresItem = () => ({ id: Date.now() + Math.random(), type: 'Faïence', customType: '', montant: '', img: null });
+const autresItemLabel = (item) => item.type === 'Autre' ? (item.customType || 'Autre') : (item.type || 'Autres');
+// Amount of the Autres list for a row. Old rows (saved before the list)
+// have no autresItems, only a single legacy "autres" amount — that amount
+// is used as-is so old reports keep their totals.
+const autresAmountOf = (row) => {
+  if (Array.isArray(row.autresItems) && row.autresItems.length > 0) {
+    return row.autresItems.reduce((sum, it) => sum + (parseFloat(it.montant) || 0), 0);
+  }
+  return parseFloat(row.autres) || 0;
+};
+// Items to display/print for a row: the list itself, or one legacy item
+// for an old row that only has a single "autres" amount.
+const autresItemsForDisplay = (row) => {
+  if (Array.isArray(row.autresItems) && row.autresItems.length > 0) return row.autresItems;
+  if (parseFloat(row.autres)) {
+    return [{ id: 'legacy', type: 'Autres (ancien)', customType: '', montant: row.autres, img: row.autresImg || null }];
+  }
+  return [];
+};
+
 const uploadProofToCloudinary = async (dataUrl, rowId, field) => {
   // Second storage (free Cloudinary), tried FIRST so proofs save now
   // while Firebase Storage is still blocked on Blaze billing. Firebase
@@ -112,6 +138,12 @@ const cleanRowForSave = (row) => {
   PROOF_FIELDS.forEach((field) => {
     if (cleaned[field] === undefined) cleaned[field] = null;
   });
+  if (Array.isArray(cleaned.autresItems)) {
+    cleaned.autresItems = cleaned.autresItems.map((it) => ({
+      id: it.id, type: it.type || '', customType: it.customType || '',
+      montant: it.montant || '', img: it.img ?? null
+    }));
+  }
   return cleaned;
 };
 
@@ -130,6 +162,11 @@ const prepareRowsForSave = async (rowsToSave, headerForSave, onProgress, ownerUi
         jobs.push({ rowIndex, field });
       }
     });
+    (row.autresItems || []).forEach((item) => {
+      if (typeof item.img === 'string' && item.img.startsWith('data:')) {
+        jobs.push({ rowIndex, itemId: item.id });
+      }
+    });
   });
   const results = rowsToSave.map((r) => cleanRowForSave(r));
   let done = 0;
@@ -138,16 +175,23 @@ const prepareRowsForSave = async (rowsToSave, headerForSave, onProgress, ownerUi
   await Promise.all(
     jobs.map(async (job) => {
       try {
-        results[job.rowIndex][job.field] = await uploadProofImage(
-          rowsToSave[job.rowIndex][job.field],
-          rowsToSave[job.rowIndex].id,
-          job.field,
-          ownerUid
-        );
+        if (job.itemId) {
+          const item = rowsToSave[job.rowIndex].autresItems.find((it) => it.id === job.itemId);
+          const url = await uploadProofImage(item.img, rowsToSave[job.rowIndex].id, `autres-${item.id}`, ownerUid);
+          const target = results[job.rowIndex].autresItems.find((it) => it.id === job.itemId);
+          if (target) target.img = url;
+        } else {
+          results[job.rowIndex][job.field] = await uploadProofImage(
+            rowsToSave[job.rowIndex][job.field],
+            rowsToSave[job.rowIndex].id,
+            job.field,
+            ownerUid
+          );
+        }
       } catch (e) {
         if (!firstError) firstError = e;
         // Keep the original base64 proof for a possible fallback below.
-        results[job.rowIndex][job.field] = rowsToSave[job.rowIndex][job.field];
+        if (!job.itemId) results[job.rowIndex][job.field] = rowsToSave[job.rowIndex][job.field];
       }
       done += 1;
       onProgress?.(done, jobs.length);
@@ -185,7 +229,8 @@ export const EnveloppeFinanciereView = ({ user }) => {
     cimentQt: '', cimentPrix: '', cimentImg: null,
     argileQt: '', argilePrix: '', argileImg: null,
     carburant: '', carburantImg: null,
-    autres: '', autresImg: null
+    autres: '', autresImg: null,
+    autresItems: []
   });
 
   const resetForm = () => {
@@ -203,14 +248,25 @@ export const EnveloppeFinanciereView = ({ user }) => {
     // Normalize old reports: missing proof fields become null (not
     // undefined, which Firestore rejects), missing text fields become ''.
     setRows(
-      (report.rows || []).map((r) => ({
-        id: r.id,
-        date: r.date || '',
-        cimentQt: r.cimentQt || '', cimentPrix: r.cimentPrix || '', cimentImg: r.cimentImg ?? null,
-        argileQt: r.argileQt || '', argilePrix: r.argilePrix || '', argileImg: r.argileImg ?? null,
-        carburant: r.carburant || '', carburantImg: r.carburantImg ?? null,
-        autres: r.autres || '', autresImg: r.autresImg ?? null
-      }))
+      (report.rows || []).map((r) => {
+        // Old rows have a single legacy "autres" amount: convert it into a
+        // one-item list on edit, so the user can give it a type and keep it.
+        const legacyItems = (!Array.isArray(r.autresItems) || r.autresItems.length === 0) && parseFloat(r.autres)
+          ? [{ id: 'legacy', type: 'Autres (ancien)', customType: '', montant: r.autres, img: r.autresImg ?? null }]
+          : null;
+        return {
+          id: r.id,
+          date: r.date || '',
+          cimentQt: r.cimentQt || '', cimentPrix: r.cimentPrix || '', cimentImg: r.cimentImg ?? null,
+          argileQt: r.argileQt || '', argilePrix: r.argilePrix || '', argileImg: r.argileImg ?? null,
+          carburant: r.carburant || '', carburantImg: r.carburantImg ?? null,
+          autres: legacyItems ? '' : (r.autres || ''), autresImg: legacyItems ? null : (r.autresImg ?? null),
+          autresItems: legacyItems || (r.autresItems || []).map((it) => ({
+            id: it.id, type: it.type || 'Faïence', customType: it.customType || '',
+            montant: it.montant || '', img: it.img ?? null
+          }))
+        };
+      })
     );
     setEditingId(report.id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -260,6 +316,13 @@ export const EnveloppeFinanciereView = ({ user }) => {
 
   const handleHeaderChange = (e) => setHeader({ ...header, [e.target.name]: e.target.value });
   const handleRowChange = (id, field, value) => setRows(rows.map(r => r.id === id ? { ...r, [field]: value } : r));
+  const addAutresItem = (rowId) => setRows(rows.map(r => r.id === rowId ? { ...r, autresItems: [...(r.autresItems || []), newAutresItem()] } : r));
+  const updateAutresItem = (rowId, itemId, field, value) => setRows(rows.map(r => r.id === rowId ? {
+    ...r, autresItems: (r.autresItems || []).map((it) => it.id === itemId ? { ...it, [field]: value } : it)
+  } : r));
+  const removeAutresItem = (rowId, itemId) => setRows(rows.map(r => r.id === rowId ? {
+    ...r, autresItems: (r.autresItems || []).filter((it) => it.id !== itemId)
+  } : r));
   const addRow = () => setRows([...rows, createEmptyRow()]);
   const removeRow = (id) => { if (rows.length > 1) setRows(rows.filter(r => r.id !== id)); };
 
@@ -293,7 +356,15 @@ export const EnveloppeFinanciereView = ({ user }) => {
         // down (45s on pick, then again on save). Save now makes the
         // single Storage attempt, with a 20s timeout, and falls back to
         // base64 for small reports, so picking a proof is instant.
-        setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: safeBase64 } : r)));
+        // Autres-item proofs use field "autresItems:<itemId>".
+        setRows((prev) => prev.map((r) => {
+          if (r.id !== rowId) return r;
+          if (typeof field === 'string' && field.startsWith('autresItems:')) {
+            const itemId = field.slice('autresItems:'.length);
+            return { ...r, autresItems: (r.autresItems || []).map((it) => String(it.id) === itemId ? { ...it, img: safeBase64 } : it) };
+          }
+          return { ...r, [field]: safeBase64 };
+        }));
         toast.success("Preuve ajoutée");
       };
       img.src = event.target.result;
@@ -309,8 +380,8 @@ export const EnveloppeFinanciereView = ({ user }) => {
       const cimentTotal = (parseFloat(d.cimentQt) || 0) * (parseFloat(d.cimentPrix) || 0);
       const argileTotal = (parseFloat(d.argileQt) || 0) * (parseFloat(d.argilePrix) || 0);
       const carburant = parseFloat(d.carburant) || 0;
-      const autres = parseFloat(d.autres) || 0;
-      return { ...d, cimentTotal, argileTotal, totalLigne: cimentTotal + argileTotal + carburant + autres };
+      const autres = autresAmountOf(d);
+      return { ...d, cimentTotal, argileTotal, autres, totalLigne: cimentTotal + argileTotal + carburant + autres };
     });
   }, [rows]);
 
@@ -351,8 +422,8 @@ export const EnveloppeFinanciereView = ({ user }) => {
       const cimentTotal = (parseFloat(r.cimentQt) || 0) * (parseFloat(r.cimentPrix) || 0);
       const argileTotal = (parseFloat(r.argileQt) || 0) * (parseFloat(r.argilePrix) || 0);
       const carburant = parseFloat(r.carburant) || 0;
-      const autres = parseFloat(r.autres) || 0;
-      return { ...r, cimentTotal, argileTotal, totalLigne: cimentTotal + argileTotal + carburant + autres };
+      const autres = autresAmountOf(r);
+      return { ...r, cimentTotal, argileTotal, autres, totalLigne: cimentTotal + argileTotal + carburant + autres };
     });
 
     const finalTotals = processedRows.reduce((acc, curr) => ({
@@ -394,7 +465,9 @@ export const EnveloppeFinanciereView = ({ user }) => {
       d.cimentQt, d.cimentPrix, d.cimentTotal ? d.cimentTotal.toFixed(2) : '',
       d.argileQt, d.argilePrix, d.argileTotal ? d.argileTotal.toFixed(2) : '',
       d.carburant,
-      d.autres,
+      // Autres column: total, with the per-material breakdown in the
+      // detail lines below the table (see "Détail des autres matériaux").
+      d.autres ? d.autres.toFixed(2) : '',
       d.totalLigne ? d.totalLigne.toFixed(2) : ''
     ]);
 
@@ -438,13 +511,37 @@ export const EnveloppeFinanciereView = ({ user }) => {
       margin: { left: 14, right: 200 }
     });
 
+    // --- 3b. DÉTAIL DES AUTRES MATÉRIAUX ---
+    // The main table only shows the Autres total per day; this breakdown
+    // names every other material with its amount, so the PDF no longer
+    // hides what "Autres" was.
+    const autresDetail = [];
+    processedRows.forEach((row, index) => {
+      autresItemsForDisplay(row).forEach((item) => {
+        autresDetail.push([`Ligne ${index + 1} — ${row.date || ''}`, autresItemLabel(item), (parseFloat(item.montant) || 0).toFixed(2)]);
+      });
+    });
+    if (autresDetail.length > 0) {
+      autoTable(doc, {
+        head: [['Ligne / Date', 'Autre matériau', 'Montant (DH)']],
+        body: autresDetail,
+        startY: doc.lastAutoTable.finalY + 15,
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 2, textColor: [0, 0, 0] },
+        headStyles: { fillColor: [60, 179, 143], textColor: 255, fontStyle: 'bold' },
+        margin: { left: 14, right: 120 }
+      });
+    }
+
     // --- 4. PROOF IMAGES (80x55 SIZE) ---
     const imagesToPrint = [];
     processedRows.forEach((row, index) => {
       if (row.cimentImg) imagesToPrint.push({ label: 'Ciment', amount: row.cimentTotal, img: row.cimentImg, line: index + 1 });
       if (row.argileImg) imagesToPrint.push({ label: 'Argile / Faïence', amount: row.argileTotal, img: row.argileImg, line: index + 1 });
       if (row.carburantImg) imagesToPrint.push({ label: 'Carburant', amount: parseFloat(row.carburant) || 0, img: row.carburantImg, line: index + 1 });
-      if (row.autresImg) imagesToPrint.push({ label: 'Autres', amount: parseFloat(row.autres) || 0, img: row.autresImg, line: index + 1 });
+      autresItemsForDisplay(row).forEach((item) => {
+        if (item.img) imagesToPrint.push({ label: autresItemLabel(item), amount: parseFloat(item.montant) || 0, img: item.img, line: index + 1 });
+      });
     });
 
     if (imagesToPrint.length > 0) {
@@ -606,8 +703,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
                 <th className="py-1 px-1 border border-slate-700">Montant</th>
                 <th className="py-1 px-1 border border-slate-700">Img</th>
 
-                <th className="py-1 px-1 border border-slate-700">Montant</th>
-                <th className="py-1 px-1 border border-slate-700">Img</th>
+                <th className="py-1 px-1 border border-slate-700" colSpan={2}>Type / Montant / Preuve</th>
               </tr>
             </thead>
             <tbody>
@@ -647,13 +743,25 @@ export const EnveloppeFinanciereView = ({ user }) => {
                     )}
                   </td>
 
-                  <td className="p-1 border border-slate-800"><input type="number" value={d.autres} onChange={(e) => handleRowChange(d.id, 'autres', e.target.value)} className={inputClass} /></td>
-                  <td className="border border-slate-800 p-1 align-top">
-                    {d.autres > 0 && (
-                      d.autresImg ? (
-                        <div className="relative group"><img src={d.autresImg} className="h-8 w-full object-cover rounded border border-slate-600" /><button onClick={() => removeImage(d.id, 'autresImg')} className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><X className="w-3 h-3 text-white"/></button></div>
-                      ) : <button onClick={() => triggerImageUpload(d.id, 'autresImg')} className={imgButtonClass}><ImageIcon className="w-3 h-3"/>Preuve</button>
-                    )}
+                  <td className="border border-slate-800 p-1 align-top" colSpan={2}>
+                    <div className="space-y-1.5 min-w-[240px]">
+                      {(d.autresItems || []).map((item) => (
+                        <div key={item.id} className="flex items-center gap-1">
+                          <select value={item.type} onChange={(e) => updateAutresItem(d.id, item.id, 'type', e.target.value)} className={`${inputClass} !py-1 !text-[11px] w-[110px] shrink-0`}>
+                            {AUTRES_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                          {item.type === 'Autre' && (
+                            <input type="text" value={item.customType} onChange={(e) => updateAutresItem(d.id, item.id, 'customType', e.target.value)} placeholder="Préciser…" className={`${inputClass} !py-1 !text-[11px] w-[90px] shrink-0`} />
+                          )}
+                          <input type="number" value={item.montant} onChange={(e) => updateAutresItem(d.id, item.id, 'montant', e.target.value)} placeholder="Montant" className={`${inputClass} !py-1 !text-[11px] w-[80px] shrink-0`} />
+                          {item.img ? (
+                            <div className="relative group shrink-0"><img src={item.img} className="h-8 w-12 object-cover rounded border border-slate-600" /><button onClick={() => updateAutresItem(d.id, item.id, 'img', null)} className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><X className="w-3 h-3 text-white"/></button></div>
+                          ) : <button onClick={() => triggerImageUpload(d.id, `autresItems:${item.id}`)} className={imgButtonClass}><ImageIcon className="w-3 h-3"/>Preuve</button>}
+                          <button onClick={() => removeAutresItem(d.id, item.id)} className="text-slate-500 hover:text-red-400 p-1 shrink-0" title="Retirer ce matériau"><X className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ))}
+                      <button onClick={() => addAutresItem(d.id)} className="text-cyan-400 hover:text-cyan-300 text-[11px] font-bold flex items-center gap-1 px-1 py-0.5"><Plus className="w-3 h-3" /> Ajouter un matériau</button>
+                    </div>
                   </td>
 
                   <td className="text-center font-bold text-emerald-400 border border-slate-800 bg-slate-900/30">{d.totalLigne ? d.totalLigne.toFixed(2) : ''}</td>
@@ -724,7 +832,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
                     const ciment = (parseFloat(row.cimentQt) || 0) * (parseFloat(row.cimentPrix) || 0);
                     const argile = (parseFloat(row.argileQt) || 0) * (parseFloat(row.argilePrix) || 0);
                     const carb = parseFloat(row.carburant) || 0;
-                    const aut = parseFloat(row.autres) || 0;
+                    const aut = autresAmountOf(row);
                     return sum + ciment + argile + carb + aut;
                   }, 0);
                   const alloue = parseFloat(r.header.montantAlloue) || 0;
