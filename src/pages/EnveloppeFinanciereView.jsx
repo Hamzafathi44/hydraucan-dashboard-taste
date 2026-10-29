@@ -26,6 +26,14 @@ const PROOF_FIELDS = ['cimentImg', 'argileImg', 'carburantImg', 'autresImg'];
 const MATERIAL_TYPES = ['Argile', 'Faïence', 'Revsol', 'Pavé', 'Béton', 'Goudron', 'Lamozik', 'Carrelage', 'Autre'];
 const materialLabelOf = (row) => row.argileType === 'Autre' ? (row.argileCustomType || 'Autre') : (row.argileType || 'Argile');
 
+// Display format for money (copy, 2026-10-29): 1000 -> "1000.00 DH".
+// Used for every displayed price/amount; editable inputs stay plain
+// numbers while typing, since a number field cannot show the " DH".
+const moneyDH = (v) => {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? `${n.toFixed(2)} DH` : '';
+};
+
 const uploadProofToCloudinary = async (dataUrl, rowId, field) => {
   // Second storage (free Cloudinary), tried FIRST so proofs save now
   // while Firebase Storage is still blocked on Blaze billing. Firebase
@@ -446,17 +454,17 @@ export const EnveloppeFinanciereView = ({ user }) => {
     const tableBody = processedRows.map((d, index) => [
       index + 1,
       d.date || '',
-      d.cimentQt, d.cimentPrix, d.cimentTotal ? d.cimentTotal.toFixed(2) : '',
+      d.cimentQt, moneyDH(d.cimentPrix), d.cimentTotal ? moneyDH(d.cimentTotal) : '',
       materialLabelOf(d),
-      d.argileQt, d.argilePrix, d.argileTotal ? d.argileTotal.toFixed(2) : '',
-      d.carburant,
-      d.autresType ? `${d.autresType} : ${d.autres}` : d.autres,
-      d.totalLigne ? d.totalLigne.toFixed(2) : ''
+      d.argileQt, moneyDH(d.argilePrix), d.argileTotal ? moneyDH(d.argileTotal) : '',
+      moneyDH(d.carburant),
+      d.autresType ? `${d.autresType} : ${moneyDH(d.autres)}` : moneyDH(d.autres),
+      d.totalLigne ? moneyDH(d.totalLigne) : ''
     ]);
 
     tableBody.push([
       { content: 'TOTAL', colSpan: 11, styles: { fontStyle: 'bold', halign: 'center' } },
-      finalTotals.totalGeneral.toFixed(2)
+      moneyDH(finalTotals.totalGeneral)
     ]);
 
     autoTable(doc, {
@@ -484,9 +492,9 @@ export const EnveloppeFinanciereView = ({ user }) => {
     autoTable(doc, {
       head: [['Récapitulatif', 'Montant (DH)']],
       body: [
-        ['Montant alloué', alloue.toFixed(2)],
-        ['Total dépensé', finalTotals.totalGeneral.toFixed(2)],
-        ['Solde restant', solde.toFixed(2)]
+        ['Montant alloué', moneyDH(alloue)],
+        ['Total dépensé', moneyDH(finalTotals.totalGeneral)],
+        ['Solde restant', moneyDH(solde)]
       ],
       startY: finalY,
       theme: 'grid',
@@ -703,7 +711,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
                   
                   <td className="p-1 border border-slate-800"><input type="number" value={d.cimentQt} onChange={(e) => handleRowChange(d.id, 'cimentQt', e.target.value)} className={inputClass} /></td>
                   <td className="p-1 border border-slate-800"><input type="number" value={d.cimentPrix} onChange={(e) => handleRowChange(d.id, 'cimentPrix', e.target.value)} className={inputClass} /></td>
-                  <td className="text-center font-mono text-cyan-400 border border-slate-800 bg-slate-900/30">{d.cimentTotal ? d.cimentTotal.toFixed(2) : ''}</td>
+                  <td className="text-center font-mono text-cyan-400 border border-slate-800 bg-slate-900/30">{d.cimentTotal ? moneyDH(d.cimentTotal) : ''}</td>
                   <td className="border border-slate-800 p-1 align-top">
                     {d.cimentTotal > 0 && (
                       d.cimentImg ? (
@@ -719,7 +727,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
                   </td>
                   <td className="p-1 border border-slate-800"><input type="number" value={d.argileQt} onChange={(e) => handleRowChange(d.id, 'argileQt', e.target.value)} className={inputClass} /></td>
                   <td className="p-1 border border-slate-800"><input type="number" value={d.argilePrix} onChange={(e) => handleRowChange(d.id, 'argilePrix', e.target.value)} className={inputClass} /></td>
-                  <td className="text-center font-mono text-cyan-400 border border-slate-800 bg-slate-900/30">{d.argileTotal ? d.argileTotal.toFixed(2) : ''}</td>
+                  <td className="text-center font-mono text-cyan-400 border border-slate-800 bg-slate-900/30">{d.argileTotal ? moneyDH(d.argileTotal) : ''}</td>
                   <td className="border border-slate-800 p-1 align-top">
                     {d.argileTotal > 0 && (
                       d.argileImg ? (
@@ -749,7 +757,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
                     )}
                   </td>
 
-                  <td className="text-center font-bold text-emerald-400 border border-slate-800 bg-slate-900/30">{d.totalLigne ? d.totalLigne.toFixed(2) : ''}</td>
+                  <td className="text-center font-bold text-emerald-400 border border-slate-800 bg-slate-900/30">{d.totalLigne ? moneyDH(d.totalLigne) : ''}</td>
                   <td className="text-center border border-slate-800">
                     <button onClick={() => removeRow(d.id)} disabled={rows.length === 1} className="text-slate-500 hover:text-red-400 disabled:opacity-30 p-1"><Trash2 className="w-4 h-4" /></button>
                   </td>
@@ -850,9 +858,9 @@ export const EnveloppeFinanciereView = ({ user }) => {
                   return (
                     <tr key={r.id} className="border-b border-slate-800 hover:bg-white/5">
                       <td className="py-2 px-2">{r.header.beneficiaire || 'Sans nom'}</td>
-                      <td className="text-center py-2 px-2 font-mono text-slate-300">{alloue.toFixed(2)}</td>
-                      <td className="text-center py-2 px-2 font-mono text-cyan-400">{totDepense.toFixed(2)}</td>
-                      <td className={`text-center py-2 px-2 font-mono font-bold ${solde < 0 ? 'text-red-400' : 'text-emerald-400'}`}>{solde.toFixed(2)}</td>
+                      <td className="text-center py-2 px-2 font-mono text-slate-300">{moneyDH(alloue)}</td>
+                      <td className="text-center py-2 px-2 font-mono text-cyan-400">{moneyDH(totDepense)}</td>
+                      <td className={`text-center py-2 px-2 font-mono font-bold ${solde < 0 ? 'text-red-400' : 'text-emerald-400'}`}>{moneyDH(solde)}</td>
                       <td className="text-center py-2 px-2">
                         <div className="flex items-center justify-center gap-2">
                           <button onClick={() => downloadPDF(r.header, r.rows)} className="text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg p-1.5 transition" title="Télécharger PDF">
