@@ -18,7 +18,7 @@ import { Wallet, FileDown, Plus, Trash2, Image as ImageIcon, X, Save, Loader2, A
 // and are migrated to Storage the next time their report is saved.
 const PROOF_FIELDS = ['cimentImg', 'argileImg', 'carburantImg', 'autresImg'];
 
-// Material types for the "Argile / Faïence" column (copy, 2026-10-29):
+// Material types for the "Matériau utilisé" column (copy, 2026-10-29):
 // each day-row picks its material type from this select list — Argile,
 // Faïence, Revsol, Pavé, etc. — because one column covers all of them.
 // Free typing for anything else lives in the Autres section (autresType),
@@ -284,7 +284,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
   const handleRowChange = (id, field, value) => setRows(rows.map(r => r.id === id ? { ...r, [field]: value } : r));
   // Autres typing (copy, 2026-10-29): free typing lives in the Autres
   // section (autresType field, above the Autres amount), while the
-  // Argile / Faïence column uses the MATERIAL_TYPES select list above.
+  // Matériau utilisé column uses the MATERIAL_TYPES select list above.
   // Shared proof (copy, 2026-10-29): one proof image (one invoice, one
   // receipt) can cover two or three consommations, whatever their date or
   // type. Reusing copies the image reference into another slot — no
@@ -460,7 +460,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
     ]);
 
     autoTable(doc, {
-      head: [['N°', 'Date', 'Ciment Qt', 'Ciment P.U.', 'Ciment Total', 'Matériau', 'Mat. Qt', 'Mat. P.U.', 'Mat. Total', 'Carburant', 'Autres', 'Total']],
+      head: [['N°', 'Date', 'Ciment Qt', 'Ciment P.U.', 'Ciment Total', 'Matériau utilisé', 'Mat. Qt', 'Mat. P.U.', 'Mat. Total', 'Carburant', 'Autres', 'Total']],
       body: tableBody,
       startY: 50,
       theme: 'grid',
@@ -670,7 +670,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
                 <th className="py-2 px-1 border border-slate-700 w-8" rowSpan={2}>N°</th>
                 <th className="py-2 px-1 border border-slate-700 w-24" rowSpan={2}>Date</th>
                 <th className="py-1 border border-slate-700" colSpan={4}>Ciment</th>
-                <th className="py-1 border border-slate-700" colSpan={5}>Argile / Faïence</th>
+                <th className="py-1 border border-slate-700" colSpan={5}>Matériau utilisé</th>
                 <th className="py-1 border border-slate-700" colSpan={2}>Carburant</th>
                 <th className="py-1 border border-slate-700" colSpan={2}>Autres</th>
                 <th className="py-2 px-1 border border-slate-700" rowSpan={2}>Total</th>
