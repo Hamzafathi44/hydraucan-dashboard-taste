@@ -142,16 +142,24 @@ const prepareRowsForSave = async (rowsToSave, headerForSave, onProgress, ownerUi
   const results = rowsToSave.map((r) => cleanRowForSave(r));
   let done = 0;
   let firstError = null;
+  // Shared proofs (copy, 2026-10-29): identical base64 images (one proof
+  // reused for several consommations) are uploaded ONCE and share the
+  // same URL, so the PDF grouping by image still works after a reload.
+  const uploadCache = new Map();
   onProgress?.(0, jobs.length);
   await Promise.all(
     jobs.map(async (job) => {
       try {
-        results[job.rowIndex][job.field] = await uploadProofImage(
-          rowsToSave[job.rowIndex][job.field],
-          rowsToSave[job.rowIndex].id,
-          job.field,
-          ownerUid
-        );
+        const dataUrl = rowsToSave[job.rowIndex][job.field];
+        if (!uploadCache.has(dataUrl)) {
+          uploadCache.set(dataUrl, uploadProofImage(
+            dataUrl,
+            rowsToSave[job.rowIndex].id,
+            job.field,
+            ownerUid
+          ));
+        }
+        results[job.rowIndex][job.field] = await uploadCache.get(dataUrl);
       } catch (e) {
         if (!firstError) firstError = e;
         // Keep the original base64 proof for a possible fallback below.
@@ -496,43 +504,70 @@ export const EnveloppeFinanciereView = ({ user }) => {
       if (row.autresImg) imagesToPrint.push({ label: row.autresType || 'Autres', amount: parseFloat(row.autres) || 0, img: row.autresImg, line: index + 1 });
     });
 
-    if (imagesToPrint.length > 0) {
+    // Shared proofs (copy, 2026-10-29): consommations that share one
+    // proof image (via "Réutiliser") are grouped by image, so the image
+    // is printed ONCE, with the list of the consommations it covers
+    // (line, type, amount) above it — never one copy per consommation.
+    const mergedProofs = [];
+    imagesToPrint.forEach((it) => {
+      const ex = mergedProofs.find((m) => m.img === it.img);
+      if (ex) ex.entries.push({ line: it.line, label: it.label, amount: it.amount });
+      else mergedProofs.push({ img: it.img, entries: [{ line: it.line, label: it.label, amount: it.amount }] });
+    });
+
+    if (mergedProofs.length > 0) {
       doc.addPage();
       doc.setFont("helvetica", "bold");
       doc.setFontSize(16);
       doc.setTextColor(0, 0, 0);
       doc.text("JUSTIFICATIFS DES DÉPENSES (PREUVES)", 148, 15, { align: 'center' });
 
-      let count = 0;
-      for (const item of imagesToPrint) {
-        if (count > 0 && count % 6 === 0) {
+      // 2-column grid, but rows grow to fit shared proofs' caption
+      // lists (landscape A4: 297 x 210 mm, so rows must end by y = 200).
+      const boxWidth = 80;
+      const boxHeight = 55;
+      const padding = 4;
+      let rowTop = 25;
+      let rowMaxHeight = 0;
+
+      for (let idx = 0; idx < mergedProofs.length; idx++) {
+        const item = mergedProofs[idx];
+        const col = idx % 2;
+        if (col === 0 && idx > 0) {
+          rowTop += rowMaxHeight + 5;
+          rowMaxHeight = 0;
+        }
+
+        const captionLines = item.entries.length === 1
+          ? [`Ligne ${item.entries[0].line} - ${item.entries[0].label} : ${item.entries[0].amount.toFixed(2)} DH`]
+          : [`Preuve partagée — ${item.entries.length} consommations :`,
+             ...item.entries.map((e) => `Ligne ${e.line} - ${e.label} : ${e.amount.toFixed(2)} DH`)];
+        const titleHeight = 5 * captionLines.length + 1;
+        const itemHeight = titleHeight + boxHeight;
+        if (rowTop + itemHeight > 200) {
           doc.addPage();
           doc.setFont("helvetica", "bold");
           doc.setFontSize(16);
+          doc.setTextColor(0, 0, 0);
           doc.text("JUSTIFICATIFS DES DÉPENSES (SUITE)", 148, 15, { align: 'center' });
+          rowTop = 25;
+          rowMaxHeight = 0;
         }
 
-        const col = count % 2; 
-        const row = Math.floor((count % 6) / 2); 
+        const x = col === 0 ? 50 : 50 + boxWidth + 37;
+        const y = rowTop + titleHeight;
 
-        // ✅ NEW SIZE: 80 WIDTH x 55 HEIGHT
-        const boxWidth = 80; 
-        const boxHeight = 55; 
-        const padding = 4; 
-        
-        // Centered columns for 80mm width
-        const x = col === 0 ? 50 : 50 + boxWidth + 37; 
-        const y = 25 + (row * 60); 
+        captionLines.forEach((line, li) => {
+          doc.setFont("helvetica", li === 0 ? "bold" : "normal");
+          doc.setFontSize(li === 0 ? 10 : 9);
+          doc.setTextColor(40, 40, 40);
+          doc.text(line, x, rowTop + 5 * li + 4);
+        });
 
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(10);
-        doc.setTextColor(40, 40, 40);
-        doc.text(`Ligne ${item.line} - ${item.label} : ${item.amount.toFixed(2)} DH`, x, y - 4);
+        doc.setFillColor(248, 250, 252);
+        doc.rect(x, y, boxWidth, boxHeight, 'F');
 
-        doc.setFillColor(248, 250, 252); 
-        doc.rect(x, y, boxWidth, boxHeight, 'F'); 
-        
-        doc.setDrawColor(200, 200, 200); 
+        doc.setDrawColor(200, 200, 200);
         doc.setLineWidth(0.3);
         doc.rect(x, y, boxWidth, boxHeight, 'S');
 
@@ -555,7 +590,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
           doc.text("Erreur d'affichage", x + padding + 10, y + boxHeight / 2);
         }
 
-        count++;
+        rowMaxHeight = Math.max(rowMaxHeight, itemHeight);
       }
     }
 
