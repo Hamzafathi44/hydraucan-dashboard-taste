@@ -18,12 +18,11 @@ import { Wallet, FileDown, Plus, Trash2, Image as ImageIcon, X, Save, Loader2, A
 // and are migrated to Storage the next time their report is saved.
 const PROOF_FIELDS = ['cimentImg', 'argileImg', 'carburantImg', 'autresImg'];
 
-// Material types for the "Matériau" column (copy, 2026-10-29): this column
-// replaces the old fixed "Argile / Faïence" column. Each day-row picks its
-// material — Argile, Faïence, Revsol, Pavé, etc. — and "Autre" opens a
-// free-text field to type any other material. Quantity, unit price and
-// proof work exactly as before, whatever the type.
-const MATERIAL_TYPES = ['Argile', 'Faïence', 'Revsol', 'Pavé', 'Béton', 'Goudron', 'Lamozik', 'Carrelage', 'Autre'];
+// Material label (copy, 2026-10-29): the Argile column is back to normal
+// (plain "Argile / Faïence", no select list) per Michael's choice, and
+// typed other materials live in the Autres section (autresType). This
+// helper is kept only so rows saved during the short material-select /
+// combobox period still show their typed material on their proof label.
 const materialLabelOf = (row) => row.argileType === 'Autre' ? (row.argileCustomType || 'Autre') : (row.argileType || 'Argile');
 
 const uploadProofToCloudinary = async (dataUrl, rowId, field) => {
@@ -274,11 +273,9 @@ export const EnveloppeFinanciereView = ({ user }) => {
 
   const handleHeaderChange = (e) => setHeader({ ...header, [e.target.name]: e.target.value });
   const handleRowChange = (id, field, value) => setRows(rows.map(r => r.id === id ? { ...r, [field]: value } : r));
-  // Material column (copy, 2026-10-29): back to a plain select list, as
-  // Michael asked — no typing box here. Free typing lives in the Autres
-  // section instead (see autresType below). argileCustomType is kept only
-  // so rows saved during the short combobox period still display their
-  // typed name via materialLabelOf.
+  // Autres typing (copy, 2026-10-29): free typing lives in the Autres
+  // section (autresType field, above the Autres amount), not in the
+  // material column. The Argile column is plain again, as originally.
   // Shared proof (copy, 2026-10-29): one proof image (one invoice, one
   // receipt) can cover two or three consommations, whatever their date or
   // type. Reusing copies the image reference into another slot — no
@@ -441,7 +438,6 @@ export const EnveloppeFinanciereView = ({ user }) => {
       index + 1,
       d.date || '',
       d.cimentQt, d.cimentPrix, d.cimentTotal ? d.cimentTotal.toFixed(2) : '',
-      materialLabelOf(d),
       d.argileQt, d.argilePrix, d.argileTotal ? d.argileTotal.toFixed(2) : '',
       d.carburant,
       d.autresType ? `${d.autresType} : ${d.autres}` : d.autres,
@@ -449,12 +445,12 @@ export const EnveloppeFinanciereView = ({ user }) => {
     ]);
 
     tableBody.push([
-      { content: 'TOTAL', colSpan: 11, styles: { fontStyle: 'bold', halign: 'center' } },
+      { content: 'TOTAL', colSpan: 10, styles: { fontStyle: 'bold', halign: 'center' } },
       finalTotals.totalGeneral.toFixed(2)
     ]);
 
     autoTable(doc, {
-      head: [['N°', 'Date', 'Ciment Qt', 'Ciment P.U.', 'Ciment Total', 'Matériau', 'Mat. Qt', 'Mat. P.U.', 'Mat. Total', 'Carburant', 'Autres', 'Total']],
+      head: [['N°', 'Date', 'Ciment Qt', 'Ciment P.U.', 'Ciment Total', 'Argile Qt', 'Argile P.U.', 'Argile Total', 'Carburant', 'Autres', 'Total']],
       body: tableBody,
       startY: 50,
       theme: 'grid',
@@ -464,11 +460,10 @@ export const EnveloppeFinanciereView = ({ user }) => {
         0: { cellWidth: 12 },
         1: { cellWidth: 22 },
         2: { cellWidth: 16 }, 3: { cellWidth: 16 }, 4: { cellWidth: 20 },
-        5: { cellWidth: 22 },
-        6: { cellWidth: 16 }, 7: { cellWidth: 16 }, 8: { cellWidth: 20 },
+        5: { cellWidth: 16 }, 6: { cellWidth: 16 }, 7: { cellWidth: 20 },
+        8: { cellWidth: 20 },
         9: { cellWidth: 20 },
-        10: { cellWidth: 20 },
-        11: { cellWidth: 25 }
+        10: { cellWidth: 25 }
       }
     });
 
@@ -631,13 +626,13 @@ export const EnveloppeFinanciereView = ({ user }) => {
           </button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-xs text-slate-300 min-w-[1200px]">
+          <table className="w-full text-xs text-slate-300 min-w-[1100px]">
             <thead>
               <tr className="bg-slate-800/80 text-slate-300">
                 <th className="py-2 px-1 border border-slate-700 w-8" rowSpan={2}>N°</th>
                 <th className="py-2 px-1 border border-slate-700 w-24" rowSpan={2}>Date</th>
                 <th className="py-1 border border-slate-700" colSpan={4}>Ciment</th>
-                <th className="py-1 border border-slate-700" colSpan={5}>Matériau</th>
+                <th className="py-1 border border-slate-700" colSpan={4}>Argile / Faïence</th>
                 <th className="py-1 border border-slate-700" colSpan={2}>Carburant</th>
                 <th className="py-1 border border-slate-700" colSpan={2}>Autres</th>
                 <th className="py-2 px-1 border border-slate-700" rowSpan={2}>Total</th>
@@ -649,7 +644,6 @@ export const EnveloppeFinanciereView = ({ user }) => {
                 <th className="py-1 px-1 border border-slate-700">Total</th>
                 <th className="py-1 px-1 border border-slate-700">Img</th>
 
-                <th className="py-1 px-1 border border-slate-700">Type</th>
                 <th className="py-1 px-1 border border-slate-700">Qt</th>
                 <th className="py-1 px-1 border border-slate-700">Prix U.</th>
                 <th className="py-1 px-1 border border-slate-700">Total</th>
@@ -679,11 +673,6 @@ export const EnveloppeFinanciereView = ({ user }) => {
                     )}
                   </td>
 
-                  <td className="p-1 border border-slate-800 align-top">
-                    <select value={d.argileType || 'Argile'} onChange={(e) => handleRowChange(d.id, 'argileType', e.target.value)} className={`${inputClass} !py-1.5 !text-[11px] min-w-[95px]`}>
-                      {MATERIAL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </td>
                   <td className="p-1 border border-slate-800"><input type="number" value={d.argileQt} onChange={(e) => handleRowChange(d.id, 'argileQt', e.target.value)} className={inputClass} /></td>
                   <td className="p-1 border border-slate-800"><input type="number" value={d.argilePrix} onChange={(e) => handleRowChange(d.id, 'argilePrix', e.target.value)} className={inputClass} /></td>
                   <td className="text-center font-mono text-cyan-400 border border-slate-800 bg-slate-900/30">{d.argileTotal ? d.argileTotal.toFixed(2) : ''}</td>
