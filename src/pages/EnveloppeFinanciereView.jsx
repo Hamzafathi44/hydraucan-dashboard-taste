@@ -4,7 +4,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'sonner';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Wallet, FileDown, Plus, Trash2, Image as ImageIcon, X, Save, Loader2, AlertTriangle, Pencil, Search } from 'lucide-react';
+import { Wallet, FileDown, Plus, Trash2, Image as ImageIcon, X, Save, Loader2, AlertTriangle, Pencil, Search, Copy } from 'lucide-react';
 
 // Proof images used to be stored as base64 inside the Firestore document.
 // Firestore documents are limited to ~1 MiB, so a report with a proof for
@@ -186,6 +186,10 @@ export const EnveloppeFinanciereView = ({ user }) => {
   
   const fileInputRef = useRef(null);
   const [activeUpload, setActiveUpload] = useState({ rowId: null, field: null });
+  // Shared proof (copy, 2026-10-29): { rowId, field } of the empty proof
+  // slot the user wants to fill by reusing an existing proof image,
+  // instead of uploading a new one. Null when the picker is closed.
+  const [reuseTarget, setReuseTarget] = useState(null);
 
   const createEmptyRow = () => ({
     id: Date.now() + Math.random(),
@@ -284,6 +288,36 @@ export const EnveloppeFinanciereView = ({ user }) => {
     return { ...r, argileType: 'Autre', argileCustomType: value === 'Autre' ? '' : value };
   }));
   const materialInputValue = (row) => row.argileType === 'Autre' ? (row.argileCustomType || '') : (row.argileType || 'Argile');
+  // Shared proof (copy, 2026-10-29): one proof image (one invoice, one
+  // receipt) can cover two or three consommations, whatever their date or
+  // type. Reusing copies the image reference into another slot — no
+  // re-upload, no re-photographing. Sources are the proofs already in the
+  // editor rows and in the saved reports (any date, any material), each
+  // shown once even if already shared. A reused URL stays a URL on save
+  // (no new upload); a reused base64 proof is uploaded once on save, as
+  // any new proof would be.
+  const proofTypeLabel = (row, field) => field === 'cimentImg' ? 'Ciment'
+    : field === 'argileImg' ? materialLabelOf(row)
+    : field === 'carburantImg' ? 'Carburant' : 'Autres';
+  const availableProofs = () => {
+    const list = [];
+    const push = (img, label) => { if (img) list.push({ img, label }); };
+    rows.forEach((r) => PROOF_FIELDS.forEach((f) => {
+      if (reuseTarget && r.id === reuseTarget.rowId && f === reuseTarget.field) return;
+      push(r[f], `${r.date || 'Sans date'} — ${proofTypeLabel(r, f)}`);
+    }));
+    (reports || []).forEach((rep) => (rep.rows || []).forEach((r) => PROOF_FIELDS.forEach((f) =>
+      push(r[f], `${rep.beneficiaire ? rep.beneficiaire + ' — ' : ''}${r.date || 'Sans date'} — ${proofTypeLabel(r, f)}`)
+    )));
+    const seen = new Set();
+    return list.filter((p) => { if (seen.has(p.img)) return false; seen.add(p.img); return true; });
+  };
+  const applyReusedProof = (img) => {
+    if (!reuseTarget) return;
+    setRows(rows.map((r) => (r.id === reuseTarget.rowId ? { ...r, [reuseTarget.field]: img } : r)));
+    setReuseTarget(null);
+    toast.success('Preuve réutilisée');
+  };
   const addRow = () => setRows([...rows, createEmptyRow()]);
   const removeRow = (id) => { if (rows.length > 1) setRows(rows.filter(r => r.id !== id)); };
 
@@ -650,7 +684,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
                     {d.cimentTotal > 0 && (
                       d.cimentImg ? (
                         <div className="relative group"><img src={d.cimentImg} className="h-8 w-full object-cover rounded border border-slate-600" /><button onClick={() => removeImage(d.id, 'cimentImg')} className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><X className="w-3 h-3 text-white"/></button></div>
-                      ) : <button onClick={() => triggerImageUpload(d.id, 'cimentImg')} className={imgButtonClass}><ImageIcon className="w-3 h-3"/>Preuve</button>
+                      ) : (<><button onClick={() => triggerImageUpload(d.id, 'cimentImg')} className={imgButtonClass}><ImageIcon className="w-3 h-3"/>Preuve</button><button onClick={() => setReuseTarget({ rowId: d.id, field: 'cimentImg' })} className={imgButtonClass}><Copy className="w-3 h-3"/>Réutiliser</button></>)
                     )}
                   </td>
 
@@ -674,7 +708,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
                     {d.argileTotal > 0 && (
                       d.argileImg ? (
                         <div className="relative group"><img src={d.argileImg} className="h-8 w-full object-cover rounded border border-slate-600" /><button onClick={() => removeImage(d.id, 'argileImg')} className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><X className="w-3 h-3 text-white"/></button></div>
-                      ) : <button onClick={() => triggerImageUpload(d.id, 'argileImg')} className={imgButtonClass}><ImageIcon className="w-3 h-3"/>Preuve</button>
+                      ) : (<><button onClick={() => triggerImageUpload(d.id, 'argileImg')} className={imgButtonClass}><ImageIcon className="w-3 h-3"/>Preuve</button><button onClick={() => setReuseTarget({ rowId: d.id, field: 'argileImg' })} className={imgButtonClass}><Copy className="w-3 h-3"/>Réutiliser</button></>)
                     )}
                   </td>
 
@@ -683,7 +717,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
                     {d.carburant > 0 && (
                       d.carburantImg ? (
                         <div className="relative group"><img src={d.carburantImg} className="h-8 w-full object-cover rounded border border-slate-600" /><button onClick={() => removeImage(d.id, 'carburantImg')} className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><X className="w-3 h-3 text-white"/></button></div>
-                      ) : <button onClick={() => triggerImageUpload(d.id, 'carburantImg')} className={imgButtonClass}><ImageIcon className="w-3 h-3"/>Preuve</button>
+                      ) : (<><button onClick={() => triggerImageUpload(d.id, 'carburantImg')} className={imgButtonClass}><ImageIcon className="w-3 h-3"/>Preuve</button><button onClick={() => setReuseTarget({ rowId: d.id, field: 'carburantImg' })} className={imgButtonClass}><Copy className="w-3 h-3"/>Réutiliser</button></>)
                     )}
                   </td>
 
@@ -692,7 +726,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
                     {d.autres > 0 && (
                       d.autresImg ? (
                         <div className="relative group"><img src={d.autresImg} className="h-8 w-full object-cover rounded border border-slate-600" /><button onClick={() => removeImage(d.id, 'autresImg')} className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><X className="w-3 h-3 text-white"/></button></div>
-                      ) : <button onClick={() => triggerImageUpload(d.id, 'autresImg')} className={imgButtonClass}><ImageIcon className="w-3 h-3"/>Preuve</button>
+                      ) : (<><button onClick={() => triggerImageUpload(d.id, 'autresImg')} className={imgButtonClass}><ImageIcon className="w-3 h-3"/>Preuve</button><button onClick={() => setReuseTarget({ rowId: d.id, field: 'autresImg' })} className={imgButtonClass}><Copy className="w-3 h-3"/>Réutiliser</button></>)
                     )}
                   </td>
 
@@ -706,6 +740,30 @@ export const EnveloppeFinanciereView = ({ user }) => {
           </table>
         </div>
       </div>
+
+      {reuseTarget && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setReuseTarget(null)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-bold text-white text-sm">Réutiliser une preuve existante</h3>
+              <button onClick={() => setReuseTarget(null)} className="text-slate-400 hover:text-white p-1"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-xs text-slate-400 mb-4">Une même preuve peut couvrir plusieurs consommations, quelle que soit leur date ou leur type. Choisissez une image déjà utilisée :</p>
+            {availableProofs().length === 0 ? (
+              <p className="text-center text-slate-500 py-8 text-sm">Aucune preuve existante pour le moment — ajoutez d'abord une preuve à une consommation.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {availableProofs().map((p, idx) => (
+                  <button key={idx} onClick={() => applyReusedProof(p.img)} className="text-left border border-slate-700 hover:border-cyan-500 rounded-xl overflow-hidden transition group">
+                    <img src={p.img} className="h-24 w-full object-cover" />
+                    <span className="block text-[11px] text-slate-300 px-2 py-1.5 group-hover:text-cyan-300">{p.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="bg-slate-900/50 border border-slate-700/60 rounded-2xl p-4 max-w-sm mb-10">
         <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3">Récapitulatif</h3>
