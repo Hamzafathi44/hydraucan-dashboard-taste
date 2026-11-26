@@ -8,7 +8,7 @@ import { usePointageData } from '../hooks/usePointageData';
 
 export const PointageView = ({ user }) => {
   const {
-    workers, paginatedList, filteredList, activeSessions,
+    workers, paginatedList, activeSessions,
     currentPage, setCurrentPage, totalPages, ITEMS_PER_PAGE,
     months, selectedMonth, setSelectedMonth, monthlySummary,
     addWorker, removeWorker, 

@@ -268,7 +268,7 @@ export const usePointageData = (user) => {
         totalHours: parseFloat(newHours)
       });
       toast.success("Heures modifiées !");
-    } catch(e) {
+    } catch {
       toast.error("Erreur de modification");
     }
   };
@@ -278,7 +278,7 @@ export const usePointageData = (user) => {
     try {
       await deleteDoc(doc(db, "pointages", logId));
       toast.success("Enregistrement supprimé");
-    } catch (e) {
+    } catch {
       toast.error("Erreur de suppression");
     }
   };

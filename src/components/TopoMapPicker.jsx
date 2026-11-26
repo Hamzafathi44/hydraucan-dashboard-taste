@@ -72,7 +72,7 @@ export default function TopoMapPicker({
     try {
       const text = await navigator.clipboard.readText();
       parseAndAddCoordinates(text);
-    } catch (err) {
+    } catch {
       toast.error('Veuillez autoriser le presse-papiers ou faire Ctrl+V dans le champ X');
     }
   };

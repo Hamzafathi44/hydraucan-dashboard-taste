@@ -9,11 +9,8 @@ import SrmCheckboxItem from '../components/SrmCheckboxItem';
 import SrmMapPicker from '../components/SrmMapPicker';
 import MaterialBuilder from '../components/MaterialBuilder';
 import { formatMaterialsData } from '../hooks/useDashboardData';
-import { mapItemToSrmForm, generateSrmPdf } from '../srmPdfGenerator';
-import { toast } from 'sonner';
-
 export const MonthlyReportView = ({
-  stats, chartData, handleAdd, handleChange, formData, setFormData, isSubmitting,
+  handleAdd, handleChange, formData, setFormData, isSubmitting,
   typeOptions, natureOptions, searchTerm, setSearchTerm,
   months, selectedMonth, setSelectedMonth, paginatedList, handleDelete,
   totalPages, currentPage, setCurrentPage, ITEMS_PER_PAGE, filteredList, handleAddOption,
@@ -21,10 +18,6 @@ export const MonthlyReportView = ({
 }) => {
   const [showFicheDetails, setShowFicheDetails] = useState(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
-  const [loadingPdfId, setLoadingPdfId] = useState(null);
-
-
-
   return (
     <Motion.div
       key="rapport"

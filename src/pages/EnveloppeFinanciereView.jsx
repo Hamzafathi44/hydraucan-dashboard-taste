@@ -197,7 +197,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
   const { reports, loading, addReport, updateReport, deleteReport } = useEnveloppes(user);
   
   const [saving, setSaving] = useState(false);
-  const [uploadingProofs, setUploadingProofs] = useState(0);
+  const [uploadingProofs] = useState(0);
   const [saveProgress, setSaveProgress] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState('');
@@ -438,7 +438,7 @@ export const EnveloppeFinanciereView = ({ user }) => {
     try {
       const logoData = await toBase64('/logo-hydracane.png');
       doc.addImage(logoData, 'PNG', 14, 10, 30, 12); 
-    } catch (e) {}
+    } catch { /* logo optional — continue without it */ }
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
@@ -591,13 +591,13 @@ export const EnveloppeFinanciereView = ({ user }) => {
           if (typeof imgData === 'string' && imgData.startsWith('http')) {
             try {
               imgData = await toBase64(imgData);
-            } catch (e) {
+            } catch {
               // Fall through to addImage, which is caught below.
             }
           }
           const imgFormat = typeof imgData === 'string' && imgData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
           doc.addImage(imgData, imgFormat, x + padding, y + padding, boxWidth - (padding * 2), boxHeight - (padding * 2));
-        } catch (e) {
+        } catch {
           doc.setTextColor(255, 0, 0);
           doc.setFontSize(9);
           doc.text("Erreur d'affichage", x + padding + 10, y + boxHeight / 2);

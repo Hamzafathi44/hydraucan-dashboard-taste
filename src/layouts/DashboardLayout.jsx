@@ -76,7 +76,7 @@ export const DashboardLayout = ({ children, activeView, setActiveView, theme, on
     try { return localStorage.getItem('hydraucan-sidebar-collapsed') === '1'; } catch { return false; }
   });
   useEffect(() => {
-    try { localStorage.setItem('hydraucan-sidebar-collapsed', isCollapsed ? '1' : '0'); } catch {}
+    try { localStorage.setItem('hydraucan-sidebar-collapsed', isCollapsed ? '1' : '0'); } catch { /* storage unavailable — keep in-memory default */ }
   }, [isCollapsed]);
   const go = (view) => { setActiveView(view); setIsMobileMenuOpen(false); };
 

@@ -4,9 +4,6 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { X as CloseIcon, MapPin, Target, Navigation } from 'lucide-react';
 
-import iconUrl from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
 const PrecisionIcon = L.divIcon({
   html: `<div style="width: 14px; height: 14px; background: #ef4444; border: 2.5px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3); transform: translate(-50%, -50%);"></div>`,
   className: '',
@@ -75,7 +72,7 @@ export default function SrmMapPicker({ isOpen, onClose, onConfirm, initialLocati
         (pos) => {
           setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         },
-        (err) => {
+        () => {
           alert("Erreur de géolocalisation: veuillez autoriser l'accès à votre position dans le navigateur.");
         },
         { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }

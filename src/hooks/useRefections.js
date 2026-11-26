@@ -69,10 +69,6 @@ export const useRefections = (user) => {
 
   const updateRefection = async (id, data) => {
     try {
-      // 🔍 We log this to make sure the ID and data are correct
-      console.log("Updating ID:", id);
-      console.log("New Data:", data);
-      
       const docRef = doc(db, 'refections', id);
       await updateDoc(docRef, {
         ...data,

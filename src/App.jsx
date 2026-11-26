@@ -172,7 +172,7 @@ function App() {
     } catch { return 'home'; }
   });
   useEffect(() => {
-    try { localStorage.setItem('hydraucan-active-view', activeView); } catch {}
+    try { localStorage.setItem('hydraucan-active-view', activeView); } catch { /* storage unavailable — keep in-memory default */ }
   }, [activeView]);
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('hydraucan-theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
@@ -184,10 +184,10 @@ function App() {
   // User's saved choices are kept even while an exempt view is shown;
   // only what is applied to <html> is overridden there.
   useEffect(() => {
-    try { localStorage.setItem('hydraucan-theme', theme); } catch {}
+    try { localStorage.setItem('hydraucan-theme', theme); } catch { /* storage unavailable — keep in-memory default */ }
   }, [theme]);
   useEffect(() => {
-    try { localStorage.setItem('hydraucan-accent', accent); } catch {}
+    try { localStorage.setItem('hydraucan-accent', accent); } catch { /* storage unavailable — keep in-memory default */ }
   }, [accent]);
 
   const isThemeExempt = EXEMPT_VIEWS.includes(activeView);
