@@ -82,7 +82,11 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
   // Work-per-day computation, copied exactly from the previous
   // Recharts version: one entry per day of the current month,
   // counted from dataList items dated in the current month.
-  const now = new Date();
+  // Batch 2: `now` is memoized at mount so the useMemo below has
+  // stable dependencies (a fresh `new Date()` every render would
+  // invalidate it each time). The dashboard's "current month" is
+  // fixed for the session, which matches how the page is used.
+  const now = useMemo(() => new Date(), []);
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const schedule = Array.from({ length: daysInMonth }, (_, i) => ({
     day: i + 1,
@@ -113,7 +117,16 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
   const donutRadius = 70;
   const donutCircumference = 2 * Math.PI * donutRadius;
   const donutGap = 4;
-  let donutCursor = 0;
+  // Batch 2 (react-hooks/immutability): the arc start of each slice
+  // is now computed as a pure cumulative array — no render-scope
+  // variable is reassigned inside the map below. donutStarts[i] is
+  // the arc length of all slices before i (length n+1, last entry is
+  // the full circumference and is unused).
+  const donutStarts = (chartData || []).reduce((starts, entry) => {
+    const prev = starts[starts.length - 1];
+    const fraction = donutTotal > 0 ? (entry.value || 0) / donutTotal : 0;
+    return [...starts, prev + fraction * donutCircumference];
+  }, [0]);
   // VibePrompt Batch 2 (copy only): data table with toolbar, in
   // the VibePrompt "data table with toolbar" style — search input,
   // sortable columns, row count and an empty state. No VibePrompt
@@ -155,13 +168,12 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
     else if (natureSort === 'diff') sorted.sort((a, b) => b.diff - a.diff);
     else sorted.sort((a, b) => b.count - a.count);
     return sorted;
-  }, [dataList, natureSearch, natureSort]);
+  }, [dataList, natureSearch, natureSort, now]);
 
   const donutSegments = (chartData || []).map((entry, index) => {
     const fraction = donutTotal > 0 ? (entry.value || 0) / donutTotal : 0;
     const dash = Math.max(0, fraction * donutCircumference - donutGap);
-    const start = donutCursor + donutGap / 2;
-    donutCursor += fraction * donutCircumference;
+    const start = donutStarts[index] + donutGap / 2;
     return {
       ...entry,
       index,

@@ -44,25 +44,32 @@ function MapLayerListener({ onLayerChange }) {
 }
 
 export default function SrmMapPicker({ isOpen, onClose, onConfirm, initialLocation }) {
-  const defaultCenter = [31.7917, -7.0926]; 
+  const defaultCenter = [31.7917, -7.0926];
   const [position, setPosition] = useState(null);
   const [currentMapType, setCurrentMapType] = useState('Normal');
-  
-  useEffect(() => {
-    if (isOpen) {
-      if (initialLocation && initialLocation.x && initialLocation.y) {
-        const x = parseFloat(initialLocation.x);
-        const y = parseFloat(initialLocation.y);
-        if (!isNaN(x) && !isNaN(y)) {
-          setPosition({ lat: y, lng: x });
-        } else {
-          setPosition(null);
-        }
-      } else {
-        setPosition(null);
-      }
+
+  // Batch 2 (react-hooks/set-state-in-effect): the position is reset
+  // from initialLocation during render — the "adjust state during
+  // render" pattern — instead of setState synchronously inside an
+  // effect. The key is the coordinate *values* (not the object
+  // identity: parents pass a fresh {x, y} literal on every render),
+  // so typing or re-rendering behind the modal no longer resets a
+  // marker the user already placed; only a real coordinate change
+  // (or open/close) does.
+  const [prevPickerKey, setPrevPickerKey] = useState(null);
+  const pickerKey = isOpen ? `${initialLocation?.x ?? ''}|${initialLocation?.y ?? ''}` : null;
+  if (pickerKey !== prevPickerKey) {
+    setPrevPickerKey(pickerKey);
+    if (pickerKey === null) {
+      setPosition(null);
+    } else if (initialLocation && initialLocation.x && initialLocation.y) {
+      const x = parseFloat(initialLocation.x);
+      const y = parseFloat(initialLocation.y);
+      setPosition(!isNaN(x) && !isNaN(y) ? { lat: y, lng: x } : null);
+    } else {
+      setPosition(null);
     }
-  }, [isOpen, initialLocation]);
+  }
 
   if (!isOpen) return null;
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { LoginForm } from './components/LoginForm';
@@ -10,18 +10,32 @@ import { useDashboardData } from './hooks/useDashboardData';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { ACCENTS, getAccent } from './lib/accent';
 
-// View Pages
-import { DashboardHome } from './pages/DashboardHome';
-import { MonthlyReportView } from './pages/MonthlyReportView';
-import { SettingsView } from './pages/SettingsView';
-import { FichierExploitationEauView } from './pages/FichierExploitationEauView';
-import { StatisticsView } from './pages/StatisticsView';
-import { PointageView } from './pages/PointageView';
-import { RefectionView } from './pages/RefectionView';
-import { EnveloppeFinanciereView } from './pages/EnveloppeFinanciereView';
+// View Pages — lazy-loaded (Batch 2): each view is its own chunk, so
+// the first load only fetches the shell + the home view instead of
+// one ~2.5 MB bundle with all 9 views, xlsx, jspdf and Leaflet.
+const DashboardHome = lazy(() => import('./pages/DashboardHome').then((m) => ({ default: m.DashboardHome })));
+const MonthlyReportView = lazy(() => import('./pages/MonthlyReportView').then((m) => ({ default: m.MonthlyReportView })));
+const SettingsView = lazy(() => import('./pages/SettingsView').then((m) => ({ default: m.SettingsView })));
+const FichierExploitationEauView = lazy(() => import('./pages/FichierExploitationEauView').then((m) => ({ default: m.FichierExploitationEauView })));
+const StatisticsView = lazy(() => import('./pages/StatisticsView').then((m) => ({ default: m.StatisticsView })));
+const PointageView = lazy(() => import('./pages/PointageView').then((m) => ({ default: m.PointageView })));
+const RefectionView = lazy(() => import('./pages/RefectionView').then((m) => ({ default: m.RefectionView })));
+const EnveloppeFinanciereView = lazy(() => import('./pages/EnveloppeFinanciereView').then((m) => ({ default: m.EnveloppeFinanciereView })));
+const SRMExcelImporter = lazy(() => import('./components/SRMExcelImporter'));
 
-// استيراد مكون استيراد الإكسل الجديد
-import SRMExcelImporter from './components/SRMExcelImporter';
+// Fallback while a view chunk loads — same skeleton language as the
+// auth loader above (pulsing blocks, no invented content).
+const ViewFallback = () => (
+  <div className="p-4 md:p-6 space-y-4" aria-label="Chargement de la page">
+    <div className="h-8 w-56 rounded-lg bg-slate-300/60 animate-pulse" />
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="h-24 rounded-xl bg-slate-200/70 animate-pulse" />
+      <div className="h-24 rounded-xl bg-slate-200/70 animate-pulse" />
+      <div className="h-24 rounded-xl bg-slate-200/70 animate-pulse" />
+    </div>
+    <div className="h-64 rounded-xl bg-slate-200/70 animate-pulse" />
+  </div>
+);
 
 const AccentPicker = ({ accent, onAccentChange }) => (
   <span className="inline-flex items-center gap-1.5" role="group" aria-label="Couleur du thème">
@@ -78,75 +92,101 @@ const PageTransition = ({ viewKey, direction, children }) => {
 
 const AuthenticatedApp = ({ user, activeView, setActiveView, theme, onToggleTheme, accent, onAccentChange, isThemeExempt, effectiveTheme, effectiveAccent }) => {
   const dashboardData = useDashboardData(user);
-  const prevViewRef = useRef(activeView);
-  const direction = VIEW_ORDER.indexOf(activeView) >= VIEW_ORDER.indexOf(prevViewRef.current) ? 1 : -1;
-  useEffect(() => { prevViewRef.current = activeView; }, [activeView]);
+  // Batch 2: direction is now derived with the "adjust state during
+  // render" pattern instead of reading prevViewRef.current during
+  // render (react-hooks/refs). When the view changes, direction is
+  // recomputed in the same render pass, so the entering view always
+  // slides from the correct side.
+  const [prevView, setPrevView] = useState(activeView);
+  const [direction, setDirection] = useState(1);
+  if (activeView !== prevView) {
+    setDirection(VIEW_ORDER.indexOf(activeView) >= VIEW_ORDER.indexOf(prevView) ? 1 : -1);
+    setPrevView(activeView);
+  }
 
   return (
     <DashboardLayout activeView={activeView} setActiveView={setActiveView} theme={effectiveTheme} onToggleTheme={isThemeExempt ? null : onToggleTheme} accent={effectiveAccent} onAccentChange={isThemeExempt ? null : onAccentChange} isThemeExempt={isThemeExempt}>
       <AnimatePresence mode="wait">
         {activeView === 'home' && (
           <PageTransition key="home" viewKey="home" direction={direction}>
-            <DashboardHome
-              stats={dashboardData.stats}
-              dataList={dashboardData.dataList}
-              chartData={dashboardData.chartData}
-              theme={theme}
-              accent={accent}
-            />
+            <Suspense fallback={<ViewFallback />}>
+              <DashboardHome
+                stats={dashboardData.stats}
+                dataList={dashboardData.dataList}
+                chartData={dashboardData.chartData}
+                theme={theme}
+                accent={accent}
+              />
+            </Suspense>
           </PageTransition>
         )}
         {activeView === 'pointage' && (
           <PageTransition key="pointage" viewKey="pointage" direction={direction}>
-            <PointageView user={user} />
+            <Suspense fallback={<ViewFallback />}>
+              <PointageView user={user} />
+            </Suspense>
           </PageTransition>
         )}
         {activeView === 'rapport' && (
           <PageTransition key="rapport" viewKey="rapport" direction={direction}>
-            <MonthlyReportView
-              {...dashboardData}
-            />
+            <Suspense fallback={<ViewFallback />}>
+              <MonthlyReportView
+                {...dashboardData}
+              />
+            </Suspense>
           </PageTransition>
         )}
         {activeView === 'refection' && (
           <PageTransition key="refection" viewKey="refection" direction={direction}>
-            <RefectionView user={user} />
+            <Suspense fallback={<ViewFallback />}>
+              <RefectionView user={user} />
+            </Suspense>
           </PageTransition>
         )}
         {activeView === 'statistics' && (
           <PageTransition key="statistics" viewKey="statistics" direction={direction}>
-            <StatisticsView dataList={dashboardData.dataList} theme={theme} accent={accent} />
+            <Suspense fallback={<ViewFallback />}>
+              <StatisticsView dataList={dashboardData.dataList} theme={theme} accent={accent} />
+            </Suspense>
           </PageTransition>
         )}
         {activeView === 'fichier' && (
           <PageTransition key="fichier" viewKey="fichier" direction={direction}>
-            <FichierExploitationEauView user={user} {...dashboardData} />
+            <Suspense fallback={<ViewFallback />}>
+              <FichierExploitationEauView user={user} {...dashboardData} />
+            </Suspense>
           </PageTransition>
         )}
 
         {activeView === 'srm-excel' && (
           <PageTransition key="srm-excel" viewKey="srm-excel" direction={direction}>
-            <div className="p-4 md:p-6 max-w-4xl mx-auto">
-              <SRMExcelImporter />
-            </div>
+            <Suspense fallback={<ViewFallback />}>
+              <div className="p-4 md:p-6 max-w-4xl mx-auto">
+                <SRMExcelImporter />
+              </div>
+            </Suspense>
           </PageTransition>
         )}
 
         {/* Enveloppe block: outside the srm-excel block */}
         {activeView === 'enveloppe' && (
           <PageTransition key="enveloppe" viewKey="enveloppe" direction={direction}>
-            <EnveloppeFinanciereView user={user} />
+            <Suspense fallback={<ViewFallback />}>
+              <EnveloppeFinanciereView user={user} />
+            </Suspense>
           </PageTransition>
         )}
 
         {activeView === 'settings' && (
           <PageTransition key="settings" viewKey="settings" direction={direction}>
-            <SettingsView
-              typeOptions={dashboardData.typeOptions}
-              natureOptions={dashboardData.natureOptions}
-              handleAddOption={dashboardData.handleAddOption}
-              handleRemoveOption={dashboardData.handleRemoveOption}
-            />
+            <Suspense fallback={<ViewFallback />}>
+              <SettingsView
+                typeOptions={dashboardData.typeOptions}
+                natureOptions={dashboardData.natureOptions}
+                handleAddOption={dashboardData.handleAddOption}
+                handleRemoveOption={dashboardData.handleRemoveOption}
+              />
+            </Suspense>
           </PageTransition>
         )}
       </AnimatePresence>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import { 
   Search, Download, Plus, Filter, Calendar as CalendarIcon, 
@@ -6,7 +6,9 @@ import {
 } from 'lucide-react';
 import { generateReportPDF } from '../pdfGenerator';
 import SrmCheckboxItem from '../components/SrmCheckboxItem';
-import SrmMapPicker from '../components/SrmMapPicker';
+// Batch 2: Leaflet (via SrmMapPicker) is loaded on demand, only when
+// the map modal opens — it is not part of the view's first-load chunk.
+const SrmMapPicker = lazy(() => import('../components/SrmMapPicker'));
 import MaterialBuilder from '../components/MaterialBuilder';
 import { formatMaterialsData } from '../hooks/useDashboardData';
 export const MonthlyReportView = ({
@@ -337,16 +339,22 @@ export const MonthlyReportView = ({
         )}
       </section>
 
-      <SrmMapPicker 
-        isOpen={isMapOpen} 
-        onClose={() => setIsMapOpen(false)} 
-        onConfirm={(coords) => {
-           handleChange({ target: { name: 'x', value: coords.x, type: 'text' }});
-           handleChange({ target: { name: 'y', value: coords.y, type: 'text' }});
-           handleChange({ target: { name: 'mapType', value: coords.mapType || 'Normal', type: 'text' }});
-        }} 
-        initialLocation={{ x: formData.x, y: formData.y }}
-      />
+      {/* Srm Map Picker Modal — mounted only when open, so the
+          Leaflet chunk is fetched on demand, not with the view. */}
+      {isMapOpen && (
+        <Suspense fallback={null}>
+          <SrmMapPicker
+            isOpen={isMapOpen}
+            onClose={() => setIsMapOpen(false)}
+            onConfirm={(coords) => {
+               handleChange({ target: { name: 'x', value: coords.x, type: 'text' }});
+               handleChange({ target: { name: 'y', value: coords.y, type: 'text' }});
+               handleChange({ target: { name: 'mapType', value: coords.mapType || 'Normal', type: 'text' }});
+            }}
+            initialLocation={{ x: formData.x, y: formData.y }}
+          />
+        </Suspense>
+      )}
     </Motion.div>
   );
 };

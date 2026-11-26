@@ -1,7 +1,7 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useEnveloppes } from '../hooks/useEnveloppes';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// Batch 2: jspdf is loaded on demand inside downloadPDF (dynamic
+// import) instead of statically, so it is not in the first-load bundle.
 import { toast } from 'sonner';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Wallet, FileDown, Plus, Trash2, Image as ImageIcon, X, Save, Loader2, AlertTriangle, Pencil, Search, Copy } from 'lucide-react';
@@ -38,6 +38,19 @@ const moneyDH = (v) => {
   const n = parseFloat(v);
   return Number.isFinite(n) ? `${n.toFixed(2)} DH` : '';
 };
+
+// Batch 2: createEmptyRow lives at module level (it uses only
+// Date.now/Math.random, no props or state) so resetForm can be a
+// stable useCallback with no missing dependencies.
+const createEmptyRow = () => ({
+  id: Date.now() + Math.random(),
+  date: '',
+  cimentQt: '', cimentPrix: '', cimentImg: null,
+  argileQt: '', argilePrix: '', argileImg: null,
+  argileType: 'Argile', argileCustomType: '',
+  carburant: '', carburantImg: null,
+  autres: '', autresImg: null, autresType: ''
+});
 
 const uploadProofToCloudinary = async (dataUrl, rowId, field) => {
   // Second storage (free Cloudinary), tried FIRST so proofs save now
@@ -212,25 +225,18 @@ export const EnveloppeFinanciereView = ({ user }) => {
   // instead of uploading a new one. Null when the picker is closed.
   const [reuseTarget, setReuseTarget] = useState(null);
 
-  const createEmptyRow = () => ({
-    id: Date.now() + Math.random(),
-    date: '',
-    cimentQt: '', cimentPrix: '', cimentImg: null,
-    argileQt: '', argilePrix: '', argileImg: null,
-    argileType: 'Argile', argileCustomType: '',
-    carburant: '', carburantImg: null,
-    autres: '', autresImg: null, autresType: ''
-  });
-
-  const resetForm = () => {
+  // Batch 2 (react-hooks/exhaustive-deps): resetForm is a stable
+  // callback (it only calls setState setters and the module-level
+  // createEmptyRow), so the effect below can depend on it safely.
+  const resetForm = useCallback(() => {
     setHeader({ beneficiaire: '', montantAlloue: '' });
     setRows([createEmptyRow()]);
     setEditingId(null);
-  };
+  }, []);
 
   useEffect(() => {
     if (!editingId) resetForm();
-  }, [editingId]);
+  }, [editingId, resetForm]);
 
   const handleEditClick = (report) => {
     setHeader(report.header || { beneficiaire: '', montantAlloue: '' });
@@ -412,8 +418,20 @@ export const EnveloppeFinanciereView = ({ user }) => {
   };
 
   const downloadPDF = async (reportHeader, reportRows = []) => {
-    const doc = new jsPDF('landscape', 'mm', 'a4');
     const loadingToast = toast.loading("Génération du PDF...");
+    // Loaded on demand (Batch 2); if the chunk fails to load, dismiss
+    // the toast and report it instead of leaving it spinning.
+    let jsPDF;
+    let autoTable;
+    try {
+      ({ jsPDF } = await import('jspdf'));
+      ({ default: autoTable } = await import('jspdf-autotable'));
+    } catch {
+      toast.dismiss(loadingToast);
+      toast.error("Impossible de charger le générateur PDF — vérifiez la connexion");
+      return;
+    }
+    const doc = new jsPDF('landscape', 'mm', 'a4');
 
     const processedRows = reportRows.map(r => {
       const cimentTotal = (parseFloat(r.cimentQt) || 0) * (parseFloat(r.cimentPrix) || 0);

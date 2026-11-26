@@ -1,5 +1,6 @@
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// Batch 2: jspdf is loaded on demand (dynamic import) instead of
+// statically, so it is not part of the first-load bundle — it is only
+// fetched when a PDF is actually generated.
 import { toast } from 'sonner';
 
 // Helper to convert images to Base64
@@ -90,8 +91,20 @@ const buildBody = (entries) => {
 };
 
 export const generateReportPDF = async (filteredList, selectedMonth, customTitle) => {
-  const doc = new jsPDF('landscape', 'mm', 'a4');
   const loadingToast = toast.loading("Génération du PDF...");
+  // Loaded on demand (Batch 2); if the chunk fails to load, dismiss
+  // the toast and report it instead of leaving it spinning.
+  let jsPDF;
+  let autoTable;
+  try {
+    ({ jsPDF } = await import('jspdf'));
+    ({ default: autoTable } = await import('jspdf-autotable'));
+  } catch {
+    toast.dismiss(loadingToast);
+    toast.error("Impossible de charger le générateur PDF — vérifiez la connexion");
+    return;
+  }
+  const doc = new jsPDF('landscape', 'mm', 'a4');
 
   try {
     const logoData = await toBase64('/logo-hydracane.png');

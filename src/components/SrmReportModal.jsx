@@ -1,50 +1,52 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { motion as Motion } from 'motion/react';
 import { Loader2, MapPin, ChevronLeft, ChevronRight, Save, Navigation, X } from 'lucide-react';
 import { generateSrmPdf } from '../srmPdfGenerator';
 import SrmCheckboxItem from './SrmCheckboxItem';
-import SrmMapPicker from './SrmMapPicker';
+// Batch 2: Leaflet (via SrmMapPicker) is loaded on demand, only when
+// the map modal opens — it is not part of the modal's first-load chunk.
+const SrmMapPicker = lazy(() => import('./SrmMapPicker'));
+
+// Batch 2: the empty form lives at module level so the open/reset
+// logic below can reuse it without duplicating the literal. The form
+// is only ever replaced (never mutated in place), so sharing this
+// object as state is safe.
+const EMPTY_SRM_FORM = {
+  date: '', nCompteur: '', adresse: '', x: '', y: '', mapType: 'Normal', estimation: '',
+  obs1: '', obs2: '', mat1: '', mat2: '',
+  fuite_can: false, fuite_bra: false,
+  mat_ac: false, mat_fg: false, mat_fd: false, mat_pe: false, mat_pvc: false,
+  type_casse: false, type_fissure: false, type_joint: false, type_presse: false, type_autre: false,
+  debit_fai: false, debit_moy: false, debit_for: false,
+  vis_oui: false, vis_non: false, vis_aff: false, vis_autre: false,
+  org_ter: false, org_mau: false, org_cor: false, org_autre: false
+};
 
 export const SrmReportModal = ({ isOpen, onClose, onSave, initialData }) => {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
   const [isMapOpen, setIsMapOpen] = useState(false);
-  const [form, setForm] = useState({
-    date: '', nCompteur: '', adresse: '', x: '', y: '', mapType: 'Normal', estimation: '',
-    obs1: '', obs2: '', mat1: '', mat2: '',
-    fuite_can: false, fuite_bra: false,
-    mat_ac: false, mat_fg: false, mat_fd: false, mat_pe: false, mat_pvc: false,
-    type_casse: false, type_fissure: false, type_joint: false, type_presse: false, type_autre: false,
-    debit_fai: false, debit_moy: false, debit_for: false,
-    vis_oui: false, vis_non: false, vis_aff: false, vis_autre: false,
-    org_ter: false, org_mau: false, org_cor: false, org_autre: false
-  });
+  const [form, setForm] = useState(EMPTY_SRM_FORM);
 
   const [savedAddresses, setSavedAddresses] = useState(() => {
     const saved = localStorage.getItem('srm_saved_addresses');
     return saved ? JSON.parse(saved) : [];
   });
 
-  useEffect(() => {
-    if (isOpen) {
-      if (initialData) {
-        setForm(initialData);
-      } else {
-        // Reset for new 
-        setForm({
-          date: '', nCompteur: '', adresse: '', x: '', y: '', mapType: 'Normal', estimation: '',
-          obs1: '', obs2: '', mat1: '', mat2: '',
-          fuite_can: false, fuite_bra: false,
-          mat_ac: false, mat_fg: false, mat_fd: false, mat_pe: false, mat_pvc: false,
-          type_casse: false, type_fissure: false, type_joint: false, type_presse: false, type_autre: false,
-          debit_fai: false, debit_moy: false, debit_for: false,
-          vis_oui: false, vis_non: false, vis_aff: false, vis_autre: false,
-          org_ter: false, org_mau: false, org_cor: false, org_autre: false
-        });
-      }
+  // Batch 2 (react-hooks/set-state-in-effect): the form and step are
+  // reset when the modal opens (or a different entry is loaded)
+  // during render — the "adjust state during render" pattern —
+  // instead of setState synchronously inside an effect. The key is
+  // the initialData identity, exactly like the old effect's deps.
+  const [prevModalKey, setPrevModalKey] = useState(null);
+  const modalKey = isOpen ? (initialData ?? EMPTY_SRM_FORM) : null;
+  if (modalKey !== prevModalKey) {
+    setPrevModalKey(modalKey);
+    if (modalKey !== null) {
+      setForm(modalKey);
       setStep(1);
     }
-  }, [isOpen, initialData]);
+  }
 
   useEffect(() => {
     localStorage.setItem('srm_saved_addresses', JSON.stringify(savedAddresses));
@@ -120,12 +122,16 @@ export const SrmReportModal = ({ isOpen, onClose, onSave, initialData }) => {
           <X className="w-5 h-5" />
         </button>
 
-        <SrmMapPicker 
-          isOpen={isMapOpen} 
-          onClose={() => setIsMapOpen(false)} 
-          onConfirm={(coords) => setForm(prev => ({ ...prev, x: coords.x, y: coords.y, mapType: coords.mapType || 'Normal' }))} 
-          initialLocation={{ x: form.x, y: form.y }}
-        />
+        {isMapOpen && (
+          <Suspense fallback={null}>
+            <SrmMapPicker
+              isOpen={isMapOpen}
+              onClose={() => setIsMapOpen(false)}
+              onConfirm={(coords) => setForm(prev => ({ ...prev, x: coords.x, y: coords.y, mapType: coords.mapType || 'Normal' }))}
+              initialLocation={{ x: form.x, y: form.y }}
+            />
+          </Suspense>
+        )}
 
         <div className="p-8 pb-4 border-b border-line">
           <h2 className="text-2xl font-black text-slate-900">

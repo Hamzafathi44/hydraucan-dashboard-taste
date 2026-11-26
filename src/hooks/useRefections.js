@@ -21,14 +21,20 @@ import { db } from '../firebase';
 // owner. They were never deleted.
 export const useRefections = (user) => {
   const [refections, setRefections] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!user);
+
+  // Batch 2 (react-hooks/set-state-in-effect): same render-adjust
+  // pattern as useEnveloppes — clear the list and reset loading when
+  // the signed-in user changes, instead of setState inside the effect.
+  const [prevUser, setPrevUser] = useState(user);
+  if (user !== prevUser) {
+    setPrevUser(user);
+    setRefections([]);
+    setLoading(!user ? false : true);
+  }
 
   useEffect(() => {
-    if (!user) {
-      setRefections([]);
-      setLoading(false);
-      return;
-    }
+    if (!user) return;
     // Sorted client-side on purpose: orderBy(date) would need a new
     // Firestore composite index before the view works at all. No
     // server-side userId filter: legacy entries without a userId must

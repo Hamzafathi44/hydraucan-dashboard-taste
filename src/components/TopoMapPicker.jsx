@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   X as CloseIcon,
   MapPin,
@@ -21,11 +21,17 @@ export default function TopoMapPicker({
   const [manualY, setManualY] = useState('');
   const [zone, setZone] = useState('Maroc - Zone 1');
 
-  useEffect(() => {
-    if (isOpen) {
-      setPoints(initialPoints || []);
-    }
-  }, [isOpen, initialPoints]);
+  // Batch 2 (react-hooks/set-state-in-effect): the point list is
+  // reset from initialPoints during render — the "adjust state during
+  // render" pattern — instead of setState synchronously inside an
+  // effect. initialPoints is a stable state reference from the parent
+  // (it only changes on confirm), so comparing by identity is exact.
+  const [prevTopoKey, setPrevTopoKey] = useState(null);
+  const topoKey = isOpen ? initialPoints : null;
+  if (topoKey !== prevTopoKey) {
+    setPrevTopoKey(topoKey);
+    if (topoKey !== null) setPoints(initialPoints || []);
+  }
 
   if (!isOpen) return null;
 

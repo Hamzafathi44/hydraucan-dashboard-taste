@@ -26,12 +26,19 @@ const MonoDonut = ({ data, title, palette = ['#16294D', '#2E4A73', '#5B7AA0', '#
   const total = data.reduce((sum, d) => sum + d.value, 0);
   const radius = 80;
   const circumference = 2 * Math.PI * radius;
-  let offset = 0;
+  // Batch 2 (react-hooks/immutability): slice offsets are computed
+  // as a pure cumulative array instead of reassigning a render-scope
+  // variable inside the map. offsets[i] is the arc length of all
+  // slices before i.
+  const offsets = data.reduce((acc, d) => {
+    const prev = acc[acc.length - 1];
+    const fraction = total > 0 ? d.value / total : 0;
+    return [...acc, prev + fraction * circumference];
+  }, [0]);
   const segments = data.map((d, i) => {
     const fraction = total > 0 ? d.value / total : 0;
     const length = data.length === 1 ? circumference : Math.max(0, fraction * circumference - 2);
-    const segment = { ...d, length, offset, color: MONO[i % MONO.length] };
-    offset += fraction * circumference;
+    const segment = { ...d, length, offset: offsets[i], color: MONO[i % MONO.length] };
     return segment;
   });
   return (

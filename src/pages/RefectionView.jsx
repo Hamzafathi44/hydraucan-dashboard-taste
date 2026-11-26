@@ -174,39 +174,36 @@ export const RefectionView = ({ user }) => {
   };
 
   // ✅ Filter by Search AND by Month / Day (day wins, month cleared)
-  const filtered = useMemo(() => {
-    let result = refections;
-
-    if (selectedDay) {
-      result = result.filter((r) => (r.date || '') === selectedDay);
-    } else if (selectedMonth) {
-      result = result.filter((r) => (r.date || '').startsWith(selectedMonth));
-    }
-
-    if (!search.trim()) return result;
-
-    const q = search.toLowerCase();
-    return result.filter((r) => {
-      const measurementsText = (r.measurements || [])
-        .map((m) => `${m.l} ${m.L} ${m.nature || ''}`)
-        .join(' ');
-      const pointsText = (r.points || [])
-        .map((p) => `${p.label} ${p.x} ${p.y}`)
-        .join(' ');
-      return (
-        (r.date || '').toLowerCase().includes(q) ||
-        (r.reference || '').toLowerCase().includes(q) ||
-        (r.type || '').toLowerCase().includes(q) ||
-        (r.address || '').toLowerCase().includes(q) ||
-        measurementsText.toLowerCase().includes(q) ||
-        pointsText.toLowerCase().includes(q)
-      );
-    });
-  }, [refections, search, selectedMonth, selectedDay]);
+  // Batch 2: the manual useMemo was removed — the compiler could not
+  // preserve it (react-hooks/preserve-manual-memoization) and the
+  // list is small, so it is computed inline and the compiler
+  // memoizes it automatically. Same filter logic, no behaviour change.
+  const byDate = refections.filter((r) => {
+    if (selectedDay) return (r.date || '') === selectedDay;
+    if (selectedMonth) return (r.date || '').startsWith(selectedMonth);
+    return true;
+  });
+  const searchQuery = search.trim() ? search.toLowerCase() : null;
+  const filtered = searchQuery === null ? byDate : byDate.filter((r) => {
+    const measurementsText = (r.measurements || [])
+      .map((m) => `${m.l} ${m.L} ${m.nature || ''}`)
+      .join(' ');
+    const pointsText = (r.points || [])
+      .map((p) => `${p.label} ${p.x} ${p.y}`)
+      .join(' ');
+    return (
+      (r.date || '').toLowerCase().includes(searchQuery) ||
+      (r.reference || '').toLowerCase().includes(searchQuery) ||
+      (r.type || '').toLowerCase().includes(searchQuery) ||
+      (r.address || '').toLowerCase().includes(searchQuery) ||
+      measurementsText.toLowerCase().includes(searchQuery) ||
+      pointsText.toLowerCase().includes(searchQuery)
+    );
+  });
 
   const groupedFiltered = useMemo(() => {
     if (!filtered) return [];
-    
+
     const processed = filtered.map(r => {
       const mList = r.measurements && r.measurements.length > 0
           ? r.measurements
@@ -215,25 +212,22 @@ export const RefectionView = ({ user }) => {
       return { ...r, mList, pts, totalRows: Math.max(mList.length, pts.length) };
     });
 
-    const result = [];
-    let i = 0;
-    while (i < processed.length) {
-      let j = i + 1;
-      let dateSpan = processed[i].totalRows;
-      while (j < processed.length && processed[j].date === processed[i].date) {
-        dateSpan += processed[j].totalRows;
-        j++;
+    // Group consecutive entries sharing a date; each entry keeps its
+    // date's total row span and a first-of-date flag. Written as a
+    // pure reduce/flatMap (no index loops or push) so the memoization
+    // can be preserved by the compiler.
+    const groups = processed.reduce((acc, entry) => {
+      const last = acc[acc.length - 1];
+      if (last && last.date === entry.date) {
+        return [...acc.slice(0, -1), { ...last, dateSpan: last.dateSpan + entry.totalRows, entries: [...last.entries, entry] }];
       }
-      for (let k = i; k < j; k++) {
-        result.push({
-          ...processed[k],
-          dateSpan,
-          isFirstOfDate: k === i
-        });
-      }
-      i = j;
-    }
-    return result;
+      return [...acc, { date: entry.date, dateSpan: entry.totalRows, entries: [entry] }];
+    }, []);
+    return groups.flatMap((g) => g.entries.map((entry, idx) => ({
+      ...entry,
+      dateSpan: g.dateSpan,
+      isFirstOfDate: idx === 0
+    })));
   }, [filtered]);
 
   const inputClass =

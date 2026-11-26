@@ -13,14 +13,23 @@ import { db } from '../firebase';
 // to their owner. They were never deleted.
 export const useEnveloppes = (user) => {
   const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!user);
+
+  // Batch 2 (react-hooks/set-state-in-effect): when the signed-in
+  // user changes (sign-in / sign-out / account switch), the list is
+  // cleared and loading reset during render — the "adjust state
+  // during render" pattern — instead of setState synchronously
+  // inside the subscription effect below. The effect itself now only
+  // subscribes/unsubscribes.
+  const [prevUser, setPrevUser] = useState(user);
+  if (user !== prevUser) {
+    setPrevUser(user);
+    setReports([]);
+    setLoading(!user ? false : true);
+  }
 
   useEffect(() => {
-    if (!user) {
-      setReports([]);
-      setLoading(false);
-      return;
-    }
+    if (!user) return;
     // Sorted client-side on purpose: orderBy(createdAt) would need a new
     // Firestore composite index before the view works. No server-side
     // userId filter: legacy reports without a userId must also load, so
