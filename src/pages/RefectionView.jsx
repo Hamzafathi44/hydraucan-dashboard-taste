@@ -1,15 +1,96 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { generateReportPDF } from '../pdfGenerator';
 import { useRefections } from '../hooks/useRefections';
 import TopoMapPicker from '../components/TopoMapPicker';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
-  Wrench, FileDown, Save, Trash2, Loader2, Search, Plus, X, MapPin, Pencil, Calendar
+  Wrench, FileDown, Save, Trash2, Loader2, Search, Plus, X, MapPin, Pencil, Calendar, Camera
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Natures for Réfection (copy, 2026-11-27): Béton was removed on
+// Michael's request — it is no longer offered for new measurements or
+// remaining lines. Entries already stored with Béton keep their value
+// and still display it; when such an entry is edited, Béton is added
+// back as an extra option for that line only, so the value is not lost.
 const NATURES = [
-  'argile', 'Béton', 'Pavé', 'Goudron', 'Faience', 'Revsol'
+  'argile', 'Pavé', 'Goudron', 'Faience', 'Revsol'
 ];
+
+const REMAINING_UNITS = ['m²', 'm'];
+
+// Photo proof per measurement (copy, 2026-11-27): same upload route as
+// Enveloppe proofs — Cloudinary first (VITE_CLOUDINARY_CLOUD_NAME /
+// VITE_CLOUDINARY_UPLOAD_PRESET, folder enveloppe_preuves), then
+// Firebase Storage (per-user path, kept for when Blaze is fixed).
+// Only the download URL is stored on the measurement (photoUrl); the
+// picked image is uploaded on save, never stored as base64 in Firestore.
+const uploadProofToCloudinary = async (dataUrl, fileName) => {
+  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+  const preset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+  if (!cloudName || !preset) return null;
+  const blob = await fetch(dataUrl).then((r) => r.blob());
+  const form = new FormData();
+  form.append('file', blob, fileName);
+  form.append('upload_preset', preset);
+  form.append('folder', 'enveloppe_preuves');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      method: 'POST',
+      body: form,
+      signal: controller.signal,
+    });
+    const json = await res.json();
+    if (!res.ok || !json.secure_url) {
+      throw new Error(json.error?.message || 'Cloudinary upload failed');
+    }
+    return json.secure_url;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const uploadMeasurementPhoto = async (dataUrl, fileName, ownerUid) => {
+  if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+    return dataUrl;
+  }
+  // Same validation as Enveloppe proofs: images only, max ~10 MB.
+  const mime = dataUrl.slice(5, dataUrl.indexOf(';'));
+  const approxBytes = Math.floor((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75);
+  if (!mime.startsWith('image/')) {
+    throw new Error('Preuve refusée : seules les images sont acceptées.');
+  }
+  if (approxBytes > 10 * 1024 * 1024) {
+    throw new Error('Preuve refusée : fichier trop volumineux (limite 10 Mo).');
+  }
+  // Try Cloudinary first; if it is not configured or it fails, fall
+  // through to Firebase Storage below (kept for when Blaze is fixed).
+  try {
+    const cloudinaryUrl = await uploadProofToCloudinary(dataUrl, fileName);
+    if (cloudinaryUrl) return cloudinaryUrl;
+  } catch (err) {
+    console.error('Cloudinary proof upload failed, trying Firebase:', err?.message || err);
+  }
+  const storage = getStorage();
+  const blob = await fetch(dataUrl).then((r) => r.blob());
+  // Same per-user path as Enveloppe proofs, matching the Storage rules
+  // (only enveloppe_preuves/<uid>/... is writable).
+  const ownerFolder = ownerUid || 'legacy';
+  const path = `enveloppe_preuves/${ownerFolder}/${Date.now()}-${Math.random().toString(36).slice(2)}/${fileName}`;
+  const upload = (async () => {
+    const snapshot = await uploadBytes(ref(storage, path), blob);
+    return getDownloadURL(snapshot.ref);
+  })();
+  upload.catch((err) => {
+    console.error('Storage proof upload failed:', err?.code || err?.message || err);
+  });
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error("Envoi de la preuve trop long (timeout 20s)")), 20000)
+  );
+  return Promise.race([upload, timeout]);
+};
 
 export const RefectionView = ({ user }) => {
   const { refections, loading, addRefection, updateRefection, deleteRefection } = useRefections(user);
@@ -30,12 +111,22 @@ export const RefectionView = ({ user }) => {
     date: '',
     reference: '',
     type: 'Refection',
-    address: ''
+    address: '',
+    incomplete: false
   });
 
   const [measurements, setMeasurements] = useState([
-    { l: '', L: '', nature: '' }
+    { l: '', L: '', nature: '', photoUrl: null, photoData: null }
   ]);
+
+  // "Reste à faire" lines, shown when the entry is marked "Non terminée":
+  // { nature, qty, unit } — nature from NATURES (no Béton), unit m² or m.
+  const [remaining, setRemaining] = useState([
+    { nature: '', qty: '', unit: 'm²' }
+  ]);
+
+  // Hidden file inputs for the per-measurement photo proof, one per row.
+  const photoInputs = useRef({});
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -48,7 +139,7 @@ export const RefectionView = ({ user }) => {
   };
 
   const addMeasurement = () => {
-    setMeasurements([...measurements, { l: '', L: '', nature: '' }]);
+    setMeasurements([...measurements, { l: '', L: '', nature: '', photoUrl: null, photoData: null }]);
   };
 
   const removeMeasurement = (index) => {
@@ -56,9 +147,51 @@ export const RefectionView = ({ user }) => {
     setMeasurements(measurements.filter((_, i) => i !== index));
   };
 
+  const handleRemainingChange = (index, field, value) => {
+    const updated = [...remaining];
+    updated[index][field] = value;
+    setRemaining(updated);
+  };
+
+  const addRemaining = () => {
+    setRemaining([...remaining, { nature: '', qty: '', unit: 'm²' }]);
+  };
+
+  const removeRemaining = (index) => {
+    if (remaining.length === 1) return;
+    setRemaining(remaining.filter((_, i) => i !== index));
+  };
+
+  const handlePhotoPicked = (index, file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Choisissez une image');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Photo trop lourde (limite 10 Mo)');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      setMeasurements((prev) =>
+        prev.map((m, i) => (i === index ? { ...m, photoData: dataUrl } : m))
+      );
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removePhoto = (index) => {
+    setMeasurements((prev) =>
+      prev.map((m, i) => (i === index ? { ...m, photoUrl: null, photoData: null } : m))
+    );
+  };
+
   const resetForm = () => {
-    setFormData({ date: '', reference: '', type: 'Refection', address: '' });
-    setMeasurements([{ l: '', L: '', nature: '' }]);
+    setFormData({ date: '', reference: '', type: 'Refection', address: '', incomplete: false });
+    setMeasurements([{ l: '', L: '', nature: '', photoUrl: null, photoData: null }]);
+    setRemaining([{ nature: '', qty: '', unit: 'm²' }]);
     setMapPoints([]);
     setEditingId(null);
   };
@@ -68,18 +201,25 @@ export const RefectionView = ({ user }) => {
       date: entry.date || '',
       reference: entry.reference || '',
       type: entry.type || 'Refection',
-      address: entry.address || ''
+      address: entry.address || '',
+      incomplete: entry.incomplete === true
     });
-    
+
     setMeasurements(
       entry.measurements && entry.measurements.length > 0
-        ? entry.measurements
-        : [{ l: entry.l || '', L: entry.L || '', nature: entry.nature || '' }]
+        ? entry.measurements.map((m) => ({ l: m.l || '', L: m.L || '', nature: m.nature || '', photoUrl: m.photoUrl || null, photoData: null }))
+        : [{ l: entry.l || '', L: entry.L || '', nature: entry.nature || '', photoUrl: null, photoData: null }]
     );
-    
+
+    setRemaining(
+      entry.remaining && entry.remaining.length > 0
+        ? entry.remaining.map((r) => ({ nature: r.nature || '', qty: r.qty ?? '', unit: r.unit || 'm²' }))
+        : [{ nature: '', qty: '', unit: 'm²' }]
+    );
+
     setMapPoints(entry.points || []);
     setEditingId(entry.id);
-    
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -98,20 +238,55 @@ export const RefectionView = ({ user }) => {
       return;
     }
 
+    // Photos are uploaded on save only (same Cloudinary-first route as
+    // Enveloppe proofs). A failed upload never blocks the save: the
+    // entry is saved without the new photo and an error toast is shown.
+    // The previously stored photo (if any) is kept when an upload fails.
     setSaving(true);
+    const savedMeasurements = await Promise.all(
+      cleanMeasurements.map(async (m, idx) => {
+        let photoUrl = m.photoUrl || null;
+        if (m.photoData) {
+          try {
+            photoUrl = await uploadMeasurementPhoto(
+              m.photoData,
+              `refection-${Date.now()}-${idx}.jpg`,
+              user?.uid
+            );
+          } catch (err) {
+            console.error('Photo upload failed:', err?.message || err);
+            toast.error('Échec de l’envoi de la photo — l’entrée est enregistrée sans photo');
+          }
+        }
+        return { l: m.l, L: m.L, nature: m.nature, photoUrl };
+      })
+    );
+
+    // "Reste à faire" is only stored for incomplete entries; unchecking
+    // "Non terminée" clears it on save.
+    const cleanRemaining = formData.incomplete
+      ? remaining
+          .filter((r) => r.nature && String(r.qty).trim() !== '')
+          .map((r) => ({ nature: r.nature, qty: String(r.qty).trim(), unit: r.unit || 'm²' }))
+      : [];
+
     let result;
 
     if (editingId) {
       result = await updateRefection(editingId, {
         ...formData,
-        measurements: cleanMeasurements,
-        points: mapPoints
+        measurements: savedMeasurements,
+        points: mapPoints,
+        incomplete: !!formData.incomplete,
+        remaining: cleanRemaining
       });
     } else {
       result = await addRefection({
         ...formData,
-        measurements: cleanMeasurements,
-        points: mapPoints
+        measurements: savedMeasurements,
+        points: mapPoints,
+        incomplete: !!formData.incomplete,
+        remaining: cleanRemaining
       });
     }
 
@@ -191,13 +366,17 @@ export const RefectionView = ({ user }) => {
     const pointsText = (r.points || [])
       .map((p) => `${p.label} ${p.x} ${p.y}`)
       .join(' ');
+    const remainingText = (r.remaining || [])
+      .map((rem) => `${rem.nature || ''} ${rem.qty || ''} ${rem.unit || ''}`)
+      .join(' ');
     return (
       (r.date || '').toLowerCase().includes(searchQuery) ||
       (r.reference || '').toLowerCase().includes(searchQuery) ||
       (r.type || '').toLowerCase().includes(searchQuery) ||
       (r.address || '').toLowerCase().includes(searchQuery) ||
       measurementsText.toLowerCase().includes(searchQuery) ||
-      pointsText.toLowerCase().includes(searchQuery)
+      pointsText.toLowerCase().includes(searchQuery) ||
+      remainingText.toLowerCase().includes(searchQuery)
     );
   });
 
@@ -293,6 +472,86 @@ export const RefectionView = ({ user }) => {
           </div>
         </div>
 
+        <div className="mt-4">
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={!!formData.incomplete}
+              onChange={(e) => setFormData({ ...formData, incomplete: e.target.checked })}
+              className="w-4 h-4 accent-amber-400"
+            />
+            <span className="text-sm font-bold text-slate-200">Non terminée</span>
+            <span className="text-xs text-slate-500">— travail en cours, avec un reste à faire par nature</span>
+          </label>
+        </div>
+
+        {formData.incomplete && (
+          <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <label className={labelClass}>Reste à faire (par nature)</label>
+              <button
+                type="button"
+                onClick={addRemaining}
+                className="flex items-center gap-1.5 text-xs font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-lg transition"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Ajouter une ligne
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {remaining.map((rem, idx) => (
+                <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                  <div className="col-span-5">
+                    <select
+                      value={rem.nature}
+                      onChange={(e) => handleRemainingChange(idx, 'nature', e.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">-- Nature --</option>
+                      {NATURES.map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-3">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={rem.qty}
+                      onChange={(e) => handleRemainingChange(idx, 'qty', e.target.value)}
+                      placeholder="Quantité"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <select
+                      value={rem.unit}
+                      onChange={(e) => handleRemainingChange(idx, 'unit', e.target.value)}
+                      className={inputClass}
+                    >
+                      {REMAINING_UNITS.map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => removeRemaining(idx)}
+                      disabled={remaining.length === 1}
+                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg p-2 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-6">
           <div className="flex items-center justify-between mb-3">
             <label className={labelClass}>Measurements (l × L — each with its own nature)</label>
@@ -306,63 +565,106 @@ export const RefectionView = ({ user }) => {
             </button>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             {measurements.map((m, idx) => {
               const area =
                 m.l && m.L
                   ? (parseFloat(m.l) * parseFloat(m.L)).toFixed(2)
                   : '';
+              const preview = m.photoData || m.photoUrl;
+              // Béton is no longer offered for new lines, but an entry
+              // stored with Béton keeps it selectable while editing.
+              const natureOptions = m.nature === 'Béton' ? [...NATURES, 'Béton'] : NATURES;
               return (
-                <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-2">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={m.l}
-                      onChange={(e) => handleMeasurementChange(idx, 'l', e.target.value)}
-                      placeholder="l (m)"
-                      className={inputClass}
-                    />
+                <div key={idx} className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2">
+                  <div className="grid grid-cols-12 gap-2 items-center">
+                    <div className="col-span-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={m.l}
+                        onChange={(e) => handleMeasurementChange(idx, 'l', e.target.value)}
+                        placeholder="l (m)"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={m.L}
+                        onChange={(e) => handleMeasurementChange(idx, 'L', e.target.value)}
+                        placeholder="L (m)"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <input
+                        readOnly
+                        value={area ? `${area} m²` : ''}
+                        placeholder="Area"
+                        className={`${inputClass} bg-slate-950/60 text-cyan-400 font-semibold`}
+                      />
+                    </div>
+                    <div className="col-span-4">
+                      <select
+                        value={m.nature}
+                        onChange={(e) => handleMeasurementChange(idx, 'nature', e.target.value)}
+                        className={inputClass}
+                      >
+                        <option value="">-- Nature --</option>
+                        {natureOptions.map((n) => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => removeMeasurement(idx)}
+                        disabled={measurements.length === 1}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg p-2 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="col-span-2">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={m.L}
-                      onChange={(e) => handleMeasurementChange(idx, 'L', e.target.value)}
-                      placeholder="L (m)"
-                      className={inputClass}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <input
-                      readOnly
-                      value={area}
-                      placeholder="Area"
-                      className={`${inputClass} bg-slate-950/60 text-cyan-400 font-semibold`}
-                    />
-                  </div>
-                  <div className="col-span-4">
-                    <select
-                      value={m.nature}
-                      onChange={(e) => handleMeasurementChange(idx, 'nature', e.target.value)}
-                      className={inputClass}
-                    >
-                      <option value="">-- Nature --</option>
-                      {NATURES.map((n) => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col-span-2 flex justify-end">
+                  <div className="flex items-center gap-2">
+                    {preview && (
+                      <img
+                        src={preview}
+                        alt="Preuve"
+                        onClick={() => window.open(preview, '_blank')}
+                        className="w-12 h-12 object-cover rounded-lg border border-slate-700 cursor-pointer"
+                        title="Voir la preuve"
+                      />
+                    )}
                     <button
                       type="button"
-                      onClick={() => removeMeasurement(idx)}
-                      disabled={measurements.length === 1}
-                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg p-2 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                      onClick={() => photoInputs.current[idx]?.click()}
+                      className="flex items-center gap-1.5 text-xs font-bold text-cyan-300 hover:text-cyan-200 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 px-3 py-1.5 rounded-lg transition"
                     >
-                      <X className="w-4 h-4" />
+                      <Camera className="w-3.5 h-3.5" />
+                      {preview ? 'Changer la photo' : 'Photo'}
                     </button>
+                    {preview && (
+                      <button
+                        type="button"
+                        onClick={() => removePhoto(idx)}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg p-1.5 transition"
+                        title="Retirer la photo"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                    <span className="text-[11px] text-slate-500">Preuve de la nature (optionnel)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      ref={(el) => { photoInputs.current[idx] = el; }}
+                      className="hidden"
+                      onChange={(e) => { handlePhotoPicked(idx, e.target.files?.[0]); e.target.value = ''; }}
+                    />
                   </div>
                 </div>
               );
@@ -487,6 +789,7 @@ export const RefectionView = ({ user }) => {
                   <th className="text-center py-2 px-2">l</th>
                   <th className="text-center py-2 px-2">L</th>
                   <th className="text-center py-2 px-2">Area</th>
+                  <th className="text-center py-2 px-2">Photo</th>
                   <th className="text-center py-2 px-2">X</th>
                   <th className="text-center py-2 px-2">Y</th>
                   <th className="text-center py-2 px-2">PDF</th>
@@ -498,6 +801,12 @@ export const RefectionView = ({ user }) => {
                 {groupedFiltered.map((r) => {
                   const { mList, pts, totalRows, dateSpan, isFirstOfDate, id } = r;
                   const isEditingRow = editingId === id;
+                  // "Reste à faire" text for incomplete entries, shown
+                  // under the address in the list.
+                  const remainingText = (r.remaining || [])
+                    .filter((rem) => rem.nature && rem.qty !== '' && rem.qty != null)
+                    .map((rem) => `${rem.nature} ${rem.qty} ${rem.unit || 'm²'}`)
+                    .join(', ');
 
                   const rows = [];
                   for (let i = 0; i < totalRows; i++) {
@@ -516,15 +825,36 @@ export const RefectionView = ({ user }) => {
                             {isFirstOfDate && (
                               <td rowSpan={dateSpan} className="py-2 px-2 align-top border-r border-slate-700">{r.date}</td>
                             )}
-                            <td rowSpan={totalRows} className="py-2 px-2 align-top border-r border-slate-700">{r.reference}</td>
+                            <td rowSpan={totalRows} className="py-2 px-2 align-top border-r border-slate-700">
+                              <div>{r.reference}</div>
+                              {r.incomplete === true && (
+                                <span className="mt-1 inline-block text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded px-1.5 py-0.5">Incomplète</span>
+                              )}
+                            </td>
                             <td rowSpan={totalRows} className="py-2 px-2 align-top">{r.type}</td>
-                            <td rowSpan={totalRows} className="py-2 px-2 align-top">{r.address || ''}</td>
+                            <td rowSpan={totalRows} className="py-2 px-2 align-top">
+                              <div>{r.address || ''}</div>
+                              {r.incomplete === true && remainingText && (
+                                <div className="mt-1 text-[10px] text-amber-300/90">Reste : {remainingText}</div>
+                              )}
+                            </td>
                           </>
                         )}
                         <td className="py-2 px-2">{m.nature || ''}</td>
                         <td className="text-center py-2 px-2">{m.l || ''}</td>
                         <td className="text-center py-2 px-2">{m.L || ''}</td>
-                        <td className="text-center py-2 px-2 text-cyan-400 font-semibold">{area}</td>
+                        <td className="text-center py-2 px-2 text-cyan-400 font-semibold">{area ? `${area} m²` : ''}</td>
+                        <td className="text-center py-2 px-2">
+                          {m.photoUrl ? (
+                            <img
+                              src={m.photoUrl}
+                              alt="Preuve"
+                              onClick={() => window.open(m.photoUrl, '_blank')}
+                              className="w-8 h-8 object-cover rounded cursor-pointer mx-auto border border-slate-700"
+                              title="Voir la preuve"
+                            />
+                          ) : ''}
+                        </td>
                         <td className="text-center py-2 px-2 font-mono text-[10px]">
                           {p ? (p.label ? `${p.label}: ` : '') + (p.x ?? '') : ''}
                         </td>

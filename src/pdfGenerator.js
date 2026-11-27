@@ -68,13 +68,23 @@ const buildBody = (entries) => {
         merges.push({ col: 3, startRow: currentRow, rowSpan: totalRows }); // Matériel Utilisé
       }
 
+      // Incomplete entries (copy, 2026-11-27): the Type cell carries the
+      // "Incomplète" marker and the address cell lists what is left to
+      // do ("Reste : ..."), in both the per-entry and the monthly PDF.
+      // Photos stay in the app only — they are not embedded here.
+      const isIncomplete = entry.incomplete === true;
+      const remainingText = (entry.remaining || [])
+        .filter((rem) => rem.nature && rem.qty !== '' && rem.qty != null)
+        .map((rem) => `${rem.nature} ${rem.qty} ${rem.unit || 'm²'}`)
+        .join(', ');
+
       mList.forEach((m, idx) => {
         const isFirst = idx === 0;
         body.push([
           isFirst && k === i ? (entry.date || '') : '',
           isFirst ? (entry.reference || '') : '',
-          isFirst ? (entry.type || '') : '',
-          isFirst ? (entry.address || entry.material || '') : '',
+          isFirst ? ((entry.type || '') + (isIncomplete ? ' (Incomplète)' : '')) : '',
+          isFirst ? ((entry.address || entry.material || '') + (isIncomplete && remainingText ? `\nReste : ${remainingText}` : '')) : '',
           m.nature || '',
           m.l || '',
           m.L || '',
