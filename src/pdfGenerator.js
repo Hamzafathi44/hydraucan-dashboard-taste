@@ -204,12 +204,14 @@ export const generateReportPDF = async (filteredList, selectedMonth, customTitle
 // New PDF form for non-completed Réfection entries (copy, 2026-11-27):
 // a distinct "Reste à faire" form — NOT the complete entries'
 // measurement table. Per entry: date / reference / type / address,
-// then a Date | Nature | Quantité restante | Unité | Photo table of what is
-// still needed (date shown once, on the first row of the entry's table,
-// like the completed PDF's merged-date style), plus a summary totalling
-// nature + unit. Photos are links, not images: the Photo column shows a
-// short clickable "Voir photo" link, so the photo takes no vertical
-// space in the PDF and still opens with one tap.
+// then a Date | Nature | Quantité restante | Unité | Photo | X | Y table
+// of what is still needed (date and coordinates shown once, on the
+// first row of the entry's table, like the completed PDF's merged-date
+// style), plus a summary totalling nature + unit. Coordinates come from
+// the entry's points (Topo Map picker), read via formatPoints exactly
+// like the completed PDF does. Photos are links, not images: the Photo
+// column shows a short clickable "Voir photo" link, so the photo takes
+// no vertical space in the PDF and still opens with one tap.
 const formatQtyTotal = (n) => {
   if (n == null || Number.isNaN(n)) return '';
   return String(Math.round(n * 100) / 100);
@@ -278,6 +280,9 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
 
   const entries = (filteredList || []).map((entry) => ({
     entry,
+    // Coordinates from the Topo Map picker, read exactly like the
+    // completed PDF's buildBody does (formatPoints on entry.points).
+    pts: formatPoints(entry.points),
     lines: cleanRemainingOf(entry).map((rem) => ({
       nature: rem.nature,
       qty: rem.qty,
@@ -288,7 +293,7 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
 
   let y = 44;
 
-  for (const { entry, lines } of entries) {
+  for (const { entry, pts, lines } of entries) {
     // Start a new page if there is not enough room left for the entry
     // header + a few rows.
     if (y > 250) {
@@ -323,9 +328,12 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
       continue;
     }
 
-    const body = lines.map((line, idx) => [idx === 0 ? (entry.date || '') : '', line.nature, String(line.qty), line.unit, line.photoUrl ? 'Voir photo' : '—']);
+    // X and Y belong to the entry, not to each reste line — shown on
+    // the first row only, like the Date column; "—" when the entry has
+    // no coordinates from the Topo Map picker.
+    const body = lines.map((line, idx) => [idx === 0 ? (entry.date || '') : '', line.nature, String(line.qty), line.unit, line.photoUrl ? 'Voir photo' : '—', idx === 0 ? (pts.x || '—') : '', idx === 0 ? (pts.y || '—') : '']);
     autoTable(doc, {
-      head: [["Date", "Nature", "Quantité restante", "Unité", "Photo"]],
+      head: [["Date", "Nature", "Quantité restante", "Unité", "Photo", "X", "Y"]],
       body,
       startY: y,
       margin: { left: margin, right: margin },
@@ -338,11 +346,13 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
         valign: 'middle'
       },
       columnStyles: {
-        0: { cellWidth: 28, halign: 'center' },
-        1: { cellWidth: 45 },
-        2: { cellWidth: 35, halign: 'center' },
-        3: { cellWidth: 20, halign: 'center' },
-        4: { cellWidth: contentWidth - 128, halign: 'center' }
+        0: { cellWidth: 24, halign: 'center' },
+        1: { cellWidth: 38 },
+        2: { cellWidth: 30, halign: 'center' },
+        3: { cellWidth: 18, halign: 'center' },
+        4: { cellWidth: 36, halign: 'center' },
+        5: { cellWidth: 18, halign: 'center' },
+        6: { cellWidth: 18, halign: 'center' }
       },
       styles: { valign: 'middle', halign: 'left', fontSize: 10, cellPadding: 2 },
       didParseCell: function (data) {
