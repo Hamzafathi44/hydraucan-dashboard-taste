@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
-import { generateReportPDF } from '../pdfGenerator';
+import { generateReportPDF, generateIncompleteReportPDF } from '../pdfGenerator';
 import { useRefections } from '../hooks/useRefections';
 import TopoMapPicker from '../components/TopoMapPicker';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -374,8 +374,14 @@ export const RefectionView = ({ user }) => {
     const month = entry.date ? entry.date.slice(0, 7) : 'Tous';
     // Distinct title + filename for one entry, instead of the monthly
     // title that made the single download indistinguishable from the
-    // whole-month PDF.
-    generateReportPDF([entry], month, `Réfection - ${entry.reference || 'sans référence'} - ${entry.date || ''}`);
+    // whole-month PDF. Non completed entries get their own "Reste à
+    // faire" PDF form (copy, 2026-11-27).
+    const title = `Réfection - ${entry.reference || 'sans référence'} - ${entry.date || ''}`;
+    if (mode === 'incomplete') {
+      generateIncompleteReportPDF([entry], month, title);
+    } else {
+      generateReportPDF([entry], month, title);
+    }
   };
 
   const handleGeneratePDF = () => {
@@ -392,7 +398,13 @@ export const RefectionView = ({ user }) => {
       const dateObj = new Date(filtered[0].date);
       titleMonth = dateObj.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
     }
-    generateReportPDF(filtered, titleMonth);
+    // Non completed entries get their own "Reste à faire" PDF form
+    // (copy, 2026-11-27); complete entries keep the measurement PDF.
+    if (mode === 'incomplete') {
+      generateIncompleteReportPDF(filtered, titleMonth);
+    } else {
+      generateReportPDF(filtered, titleMonth);
+    }
   };
 
   const handleDayPDF = () => {
@@ -405,9 +417,14 @@ export const RefectionView = ({ user }) => {
       return;
     }
     // Day title in French, e.g. "29 octobre 2026"; the month arg is
-    // unused when a custom title is given.
+    // unused when a custom title is given. Non completed entries get
+    // their own "Reste à faire" PDF form (copy, 2026-11-27).
     const dayLabel = new Date(selectedDay + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-    generateReportPDF(filtered, selectedDay, `Réfection - ${dayLabel}`);
+    if (mode === 'incomplete') {
+      generateIncompleteReportPDF(filtered, selectedDay, `Réfection - ${dayLabel}`);
+    } else {
+      generateReportPDF(filtered, selectedDay, `Réfection - ${dayLabel}`);
+    }
   };
 
   // ✅ Filter by Search AND by Month / Day (day wins, month cleared)
