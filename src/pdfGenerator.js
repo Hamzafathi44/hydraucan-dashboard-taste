@@ -204,8 +204,9 @@ export const generateReportPDF = async (filteredList, selectedMonth, customTitle
 // New PDF form for non-completed Réfection entries (copy, 2026-11-27):
 // a distinct "Reste à faire" form — NOT the complete entries'
 // measurement table. Per entry: date / reference / type / address,
-// then a Nature | Quantité restante | Unité | Photo table of what is
-// still needed, plus a summary totalling the remaining quantities per
+// then a Date | Nature | Quantité restante | Unité | Photo table of what is
+// still needed (date shown once, on the first row of the entry's table,
+// like the completed PDF's merged-date style), plus a summary totalling
 // nature + unit. Photos are best-effort: a photo that cannot be
 // fetched is skipped silently and never breaks the PDF.
 const photoToDataUrl = (url, maxSize = 400) => {
@@ -352,9 +353,9 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
       continue;
     }
 
-    const body = lines.map((line) => [line.nature, String(line.qty), line.unit, line.photoData ? '' : '—']);
+    const body = lines.map((line, idx) => [idx === 0 ? (entry.date || '') : '', line.nature, String(line.qty), line.unit, line.photoData ? '' : '—']);
     autoTable(doc, {
-      head: [["Nature", "Quantité restante", "Unité", "Photo"]],
+      head: [["Date", "Nature", "Quantité restante", "Unité", "Photo"]],
       body,
       startY: y,
       margin: { left: margin, right: margin },
@@ -367,14 +368,15 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
         valign: 'middle'
       },
       columnStyles: {
-        0: { cellWidth: 55 },
-        1: { cellWidth: 40, halign: 'center' },
-        2: { cellWidth: 25, halign: 'center' },
-        3: { cellWidth: contentWidth - 120, halign: 'center' }
+        0: { cellWidth: 28, halign: 'center' },
+        1: { cellWidth: 45 },
+        2: { cellWidth: 35, halign: 'center' },
+        3: { cellWidth: 20, halign: 'center' },
+        4: { cellWidth: contentWidth - 128, halign: 'center' }
       },
       styles: { valign: 'middle', halign: 'left', fontSize: 10, cellPadding: 2 },
       didParseCell: function (data) {
-        if (data.cell.section === 'body' && data.column.index === 3) {
+        if (data.cell.section === 'body' && data.column.index === 4) {
           const line = lines[data.row.index];
           if (line && line.photoData) {
             data.cell.styles.minCellHeight = 24;
@@ -382,7 +384,7 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
         }
       },
       didDrawCell: function (data) {
-        if (data.cell.section === 'body' && data.column.index === 3) {
+        if (data.cell.section === 'body' && data.column.index === 4) {
           const line = lines[data.row.index];
           if (line && line.photoData) {
             const size = 20;
