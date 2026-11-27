@@ -33,6 +33,10 @@ export const RefectionView = ({ user }) => {
     address: ''
   });
 
+  // Two-step delete arming (same pattern as Enveloppe, 2026-11-27):
+  // first tap arms the button ("Sûr ?"), second really deletes.
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
   const [measurements, setMeasurements] = useState([
     { l: '', L: '', nature: '' }
   ]);
@@ -125,12 +129,37 @@ export const RefectionView = ({ user }) => {
     }
   };
 
-  const handleDelete = async (id) => {
+  // Two-step delete + 8s undo (same pattern as Enveloppe, 2026-11-27):
+  // the first tap arms the button, the second deletes, and the undo
+  // toast re-adds the entry from a snapshot of its content.
+  const handleDelete = async (entry) => {
+    const id = entry.id;
+    setConfirmDeleteId(null);
     if (editingId === id) resetForm();
-    if (!window.confirm('Delete this entry?')) return;
+    const snapshot = {
+      date: entry.date || '',
+      reference: entry.reference || '',
+      type: entry.type || 'Refection',
+      address: entry.address || '',
+      measurements: (entry.mList || []).map((m) => ({ l: m.l || '', L: m.L || '', nature: m.nature || '' })),
+      points: (entry.pts || []).filter(Boolean)
+    };
     const result = await deleteRefection(id);
-    if (result.success) toast.success('Deleted');
-    else toast.error('Failed to delete');
+    if (!result.success) {
+      toast.error('Failed to delete');
+      return;
+    }
+    toast('Entrée supprimée', {
+      duration: 8000,
+      action: {
+        label: 'Annuler',
+        onClick: async () => {
+          const restored = await addRefection(snapshot);
+          if (restored.success) toast.success('Entrée restaurée');
+          else toast.error('Échec de la restauration');
+        }
+      }
+    });
   };
 
   const handleSingleDownload = (entry) => {
@@ -475,7 +504,8 @@ export const RefectionView = ({ user }) => {
             {search || selectedMonth || selectedDay ? 'No matching entries' : 'No entries yet'}
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-xs text-slate-300">
               <thead>
                 <tr className="border-b border-slate-700 text-slate-400 uppercase tracking-wider text-[10px]">
@@ -554,11 +584,11 @@ export const RefectionView = ({ user }) => {
                             </td>
                             <td rowSpan={totalRows} className="text-center py-2 px-2 align-top">
                               <button
-                                onClick={() => handleDelete(r.id)}
-                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg p-1.5 transition"
+                                onClick={() => confirmDeleteId === r.id ? handleDelete(r) : setConfirmDeleteId(r.id)}
+                                className={confirmDeleteId === r.id ? 'bg-red-500 text-white text-[11px] font-bold rounded-lg px-2 py-1.5 transition' : 'text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg p-1.5 transition'}
                                 title="Delete"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                {confirmDeleteId === r.id ? 'Sûr ?' : <Trash2 className="w-3.5 h-3.5" />}
                               </button>
                             </td>
                           </>
@@ -570,7 +600,67 @@ export const RefectionView = ({ user }) => {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+
+            {/* Mobile entry cards (same inline-map pattern as Enveloppe,
+                2026-11-27): one card per entry, same actions as the
+                desktop row — PDF, Edit, two-step Delete. */}
+            <div className="lg:hidden space-y-3">
+              {groupedFiltered.map((r) => {
+                const pts = (r.pts || []).filter(Boolean);
+                const isEditingRow = editingId === r.id;
+                return (
+                  <article key={r.id} className={`bg-white border rounded-2xl p-3 ${isEditingRow ? 'border-yellow-500/50' : 'border-[#E2E8F0]'}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-bold text-[#16294D] num-tabular">{r.date}</span>
+                      <span className="shrink-0 bg-[#0F766E]/10 border border-[#0F766E]/30 text-[#0F766E] text-xs font-bold rounded-full px-2.5 py-1 truncate">{r.reference}</span>
+                      <span className="ml-auto shrink-0 text-xs text-slate-500">{r.type}</span>
+                    </div>
+                    {r.address ? <p className="text-xs text-slate-500 mb-2">{r.address}</p> : null}
+                    <div className="space-y-1 mb-3">
+                      {(r.mList || []).map((m, i) => {
+                        const area = m.l && m.L ? (parseFloat(m.l) * parseFloat(m.L)).toFixed(2) : '';
+                        return (
+                          <div key={i} className="flex items-center justify-between text-xs">
+                            <span className="text-slate-700">{m.nature || '—'} · {m.l || '—'} × {m.L || '—'} m</span>
+                            <span className="num-tabular font-semibold text-[#0F766E]">{area ? `${area} m²` : '—'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {pts.length > 0 && (
+                      <p className="text-[11px] font-mono text-slate-500 mb-3">
+                        {pts.map((p) => `${p.label ? `${p.label}: ` : ''}${p.x ?? ''}, ${p.y ?? ''}`).join(' · ')}
+                      </p>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSingleDownload(r)}
+                        className="flex-1 min-h-11 text-sm font-bold rounded-xl flex items-center justify-center gap-1.5 bg-[#16294D]/5 border border-[#16294D]/30 text-[#16294D]"
+                        title="Télécharger cette entrée seule en PDF"
+                      >
+                        <FileDown className="w-4 h-4" /> PDF
+                      </button>
+                      <button
+                        onClick={() => handleEditClick(r)}
+                        className={`flex-1 min-h-11 text-sm font-bold rounded-xl flex items-center justify-center gap-1.5 border ${isEditingRow ? 'bg-yellow-500/10 border-yellow-500/40 text-yellow-600' : 'bg-white border-[#E2E8F0] text-slate-700'}`}
+                        title="Edit Entry"
+                      >
+                        <Pencil className="w-4 h-4" /> Modifier
+                      </button>
+                      <button
+                        onClick={() => confirmDeleteId === r.id ? handleDelete(r) : setConfirmDeleteId(r.id)}
+                        className={`flex-1 min-h-11 text-sm font-bold rounded-xl flex items-center justify-center gap-1.5 ${confirmDeleteId === r.id ? 'bg-red-500 text-white' : 'bg-red-500/10 border border-red-500/40 text-red-600'}`}
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" /> {confirmDeleteId === r.id ? 'Sûr ?' : 'Supprimer'}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 

@@ -214,11 +214,11 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
                 {Icon ? <Icon className="w-4 h-4 text-accent" /> : null}
                 <span className="text-sm text-slate-500">{stat.label}</span>
               </div>
-              <span className={`mt-2 block font-semibold text-slate-900 tabular-nums ${isNumeric ? 'text-3xl' : 'text-2xl'}`}>
+              <span className={`mt-2 block font-semibold text-[#16294D] num-tabular ${isNumeric ? 'text-3xl' : 'text-2xl'}`}>
                 <SpinningNumber value={stat.value} />
               </span>
               {stat.breakdown && (
-                <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 tabular-nums">
+                <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 num-tabular">
                   <span>RNVL: {stat.breakdown.RNVL || 0}</span>
                   <span>FUITE: {stat.breakdown.FUITE || 0}</span>
                   <span>F. SP: {stat.breakdown['F. SP'] || 0}</span>
@@ -419,7 +419,7 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
               />
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full min-w-[520px] text-left">
               <thead>
                 <tr className="border-b border-line">
@@ -454,9 +454,9 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
                 ) : natureRows.map(({ name, count, diff }) => (
                   <tr key={name} className="group hover:bg-slate-50 transition-colors">
                     <td className="py-4 text-sm font-medium text-slate-700">{name}</td>
-                    <td className="py-4 text-sm font-semibold text-slate-900 text-right tabular-nums">{count}</td>
+                    <td className="py-4 text-sm font-semibold text-[#16294D] text-right num-tabular">{count}</td>
                     <td className="py-4 text-right">
-                      <span className="text-xs font-medium text-slate-500 tabular-nums">
+                      <span className="text-xs font-medium text-slate-500 num-tabular">
                         {diff >= 0 ? '+' : ''}{diff}
                       </span>
                     </td>
@@ -464,6 +464,27 @@ export const DashboardHome = ({ stats, dataList, chartData, theme = 'light', acc
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile nature cards (same inline-map pattern as Enveloppe,
+              2026-11-27): one card per nature row, same figures as the
+              desktop table — no sideways scroll below lg. */}
+          <div className="lg:hidden space-y-3">
+            {natureRows.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-500 italic">
+                {natureSearch.trim()
+                  ? `Aucun r\u00e9sultat pour \u00ab ${natureSearch.trim()} \u00bb.`
+                  : 'Aucun travail enregistr\u00e9 ce mois-ci.'}
+              </p>
+            ) : natureRows.map(({ name, count, diff }) => (
+              <article key={name} className="bg-white border border-[#E2E8F0] rounded-2xl p-3 flex items-center gap-3">
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-medium text-slate-700 truncate">{name}</span>
+                  <span className="block text-xs text-slate-500 mt-0.5">Évolution vs mois précédent : {diff >= 0 ? '+' : ''}{diff}</span>
+                </span>
+                <span className="num-tabular shrink-0 text-lg font-semibold text-[#16294D]">{count}</span>
+              </article>
+            ))}
           </div>
         </div>
       </div>
