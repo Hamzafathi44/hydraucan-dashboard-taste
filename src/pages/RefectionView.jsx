@@ -372,12 +372,12 @@ export const RefectionView = ({ user }) => {
   // Switch an entry between the two lists (copy, 2026-11-27):
   // "Terminer" in the Non terminées list, "Rouvrir" in the Terminées
   // list. The switch opens the entry in the OTHER mode's form with
-  // one empty line ready to fill (measurements for Terminer, "Reste à
-  // faire" for Rouvrir) — measurements are l × L dimensions and reste
-  // quantities are not, so nothing is prefilled from the other side.
-  // Nothing is written until the user saves: if they back out, the
-  // entry stays in its current list. On save, the entry takes the new
-  // status with the data filled in the form.
+  // the lines prefilled from the entry's own data, so nothing is
+  // retyped — "Terminer" turns each "Reste à faire" line into a
+  // measurement line, "Rouvrir" turns each measurement into a
+  // "Reste à faire" line. Nothing is written until the user saves:
+  // if they back out, the entry stays in its current list. On save,
+  // the entry takes the new status with the data filled in the form.
   const handleSwitchStatus = (entry, toIncomplete) => {
     setMode(toIncomplete ? 'incomplete' : 'complete');
     setFormData({
@@ -387,14 +387,67 @@ export const RefectionView = ({ user }) => {
       address: entry.address || '',
       incomplete: toIncomplete
     });
-    setMeasurements([{ l: '', L: '', nature: '', photoUrl: null, photoData: null }]);
-    setRemaining([{ nature: '', qty: '', unit: 'm²', photoUrl: null, photoData: null }]);
+
+    if (toIncomplete) {
+      // Rouvrir: each measurement becomes a "Reste à faire" line,
+      // with its area (l × L, rounded to 2 decimals) as the
+      // remaining quantity in m². Legacy entries without a
+      // measurements array fall back to their l / L / nature fields,
+      // like handleEditClick does.
+      const source =
+        entry.measurements && entry.measurements.length > 0
+          ? entry.measurements
+          : entry.l != null && entry.l !== '' && entry.L != null && entry.L !== ''
+            ? [{ l: entry.l, L: entry.L, nature: entry.nature || '', photoUrl: null }]
+            : [];
+      const prefilled = source
+        .filter((m) => m.l !== '' && m.L !== '' && m.nature !== '')
+        .map((m) => {
+          const area = Math.round(Number(m.l) * Number(m.L) * 100) / 100;
+          return {
+            nature: m.nature || '',
+            qty: Number.isFinite(area) ? area : '',
+            unit: 'm²',
+            photoUrl: m.photoUrl || null,
+            photoData: null
+          };
+        })
+        .filter((r) => r.nature && String(r.qty).trim() !== '');
+      setRemaining(
+        prefilled.length > 0
+          ? prefilled
+          : [{ nature: '', qty: '', unit: 'm²', photoUrl: null, photoData: null }]
+      );
+      setMeasurements([{ l: '', L: '', nature: '', photoUrl: null, photoData: null }]);
+    } else {
+      // Terminer: each "Reste à faire" line becomes a measurement
+      // line. A reste quantity in m² is an area, so l = qty with
+      // L = 1 gives area = qty m² exactly; a reste quantity in m is
+      // a length, so the number is preserved in l with L = 1 and can
+      // be adjusted before saving.
+      const prefilled = (entry.remaining || [])
+        .filter((r) => r.nature && String(r.qty).trim() !== '')
+        .map((r) => ({
+          l: r.qty,
+          L: 1,
+          nature: r.nature,
+          photoUrl: r.photoUrl || null,
+          photoData: null
+        }));
+      setMeasurements(
+        prefilled.length > 0
+          ? prefilled
+          : [{ l: '', L: '', nature: '', photoUrl: null, photoData: null }]
+      );
+      setRemaining([{ nature: '', qty: '', unit: 'm²', photoUrl: null, photoData: null }]);
+    }
+
     setMapPoints(entry.points || []);
     setEditingId(entry.id);
     toast.info(
       toIncomplete
-        ? 'Indiquez ce qu’il reste à faire puis enregistrez'
-        : 'Complétez les mesures puis enregistrez'
+        ? 'Reste à faire pré-rempli depuis les mesures — vérifiez puis enregistrez'
+        : 'Mesures pré-remplies depuis le reste à faire — vérifiez puis enregistrez'
     );
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
