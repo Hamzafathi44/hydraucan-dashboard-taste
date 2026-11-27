@@ -1,12 +1,10 @@
 rules_version = '2';
 
-// Upgrade (copy, 2026-11-26 — Gemini 4 Hydrogen plan, Security phase):
-// closes the ownership-hijacking gap on update. Previously
-// isOwnerOrLegacy() only checked resource.data (the existing document),
-// never request.resource.data (the document after the write), so any
-// signed-in user could update a shared legacy document and add
-// userId: theirUid — claiming it and locking out all colleagues — or
-// overwrite userId on an owned document.
+// Security fix (copy, 2026-10-28): every collection the app actually uses
+// now has an owner rule. Previously this file covered only workReports and
+// appSettings, with everything else default-deny — yet the app read and
+// wrote workers, pointages, refeccions and enveloppe_reports, so the rules
+// actually deployed in the console must have been looser than this file.
 //
 // IMPORTANT: this file is NOT deployed by Vercel. To make these rules the
 // real protection for direct Firestore API access (not just through the
@@ -26,13 +24,11 @@ service cloud.firestore {
       return request.auth != null && resource.data.userId == request.auth.uid;
     }
     // Legacy exception (2026-10-29, on Michael's decision): documents
-    // written before userId stamping carry no userId (or an explicit
-    // null) and stay shared — any signed-in employee may read, update
-    // and delete them, as before. Only documents WITH a userId are
-    // restricted to their owner.
+    // written before userId stamping carry no userId and stay shared —
+    // any signed-in employee may read, update and delete them, as
+    // before. Only documents WITH a userId are restricted to their owner.
     function isLegacy() {
-      return request.auth != null
-        && (!('userId' in resource.data) || resource.data.userId == null);
+      return request.auth != null && !('userId' in resource.data);
     }
     function isOwnerOrLegacy() {
       return isOwner() || isLegacy();
@@ -40,73 +36,40 @@ service cloud.firestore {
     function creatingAsSelf() {
       return request.auth != null && request.resource.data.userId == request.auth.uid;
     }
-    // Update guard (2026-11-26): userId is immutable on update.
-    // - An owned document keeps its owner: the new userId must equal
-    //   the existing one (an update that does not touch userId keeps
-    //   the merged value, so it still passes).
-    // - A legacy (ownerless) document must stay ownerless: an update
-    //   may not add a userId, so nobody can claim a shared document
-    //   for themselves.
-    function updateKeepsOwner() {
-      return request.auth != null && (
-        (isOwner() && request.resource.data.userId == resource.data.userId)
-        || (isLegacy() && (!('userId' in request.resource.data) || request.resource.data.userId == null))
-      );
-    }
-    // appSettings/options holds exactly two string arrays (typeOptions,
-    // natureOptions), written by useDashboardData.saveOptions. Any other
-    // shape is rejected, so a compromised client cannot stash arbitrary
-    // data in the shared settings document.
-    function isValidOptionsDoc() {
-      return request.resource.data.keys().hasOnly(['typeOptions', 'natureOptions'])
-        && (!('typeOptions' in request.resource.data)
-            || (request.resource.data.typeOptions is list
-                && request.resource.data.typeOptions.size() <= 200))
-        && (!('natureOptions' in request.resource.data)
-            || (request.resource.data.natureOptions is list
-                && request.resource.data.natureOptions.size() <= 200));
-    }
 
     // Work Reports: owner only, except ownerless legacy documents (shared)
     match /workReports/{reportId} {
-      allow read, delete: if isOwnerOrLegacy();
-      allow update: if updateKeepsOwner();
+      allow read, update, delete: if isOwnerOrLegacy();
       allow create: if creatingAsSelf();
     }
 
     // Workers and Pointage: owner only, except ownerless legacy documents
     match /workers/{workerId} {
-      allow read, delete: if isOwnerOrLegacy();
-      allow update: if updateKeepsOwner();
+      allow read, update, delete: if isOwnerOrLegacy();
       allow create: if creatingAsSelf();
     }
     match /pointages/{pointageId} {
-      allow read, delete: if isOwnerOrLegacy();
-      allow update: if updateKeepsOwner();
+      allow read, update, delete: if isOwnerOrLegacy();
       allow create: if creatingAsSelf();
     }
 
     // Réfection: owner only, except ownerless legacy entries (shared)
     match /refections/{refectionId} {
-      allow read, delete: if isOwnerOrLegacy();
-      allow update: if updateKeepsOwner();
+      allow read, update, delete: if isOwnerOrLegacy();
       allow create: if creatingAsSelf();
     }
 
     // Enveloppe financière: owner only, except ownerless legacy reports
     // (shared)
     match /enveloppe_reports/{reportId} {
-      allow read, delete: if isOwnerOrLegacy();
-      allow update: if updateKeepsOwner();
+      allow read, update, delete: if isOwnerOrLegacy();
       allow create: if creatingAsSelf();
     }
 
     // App Settings collection (Nature/Type options): shared by design,
-    // any authenticated user may read them; writes must match the
-    // expected options shape (see isValidOptionsDoc above).
+    // any authenticated user may read/write them for now.
     match /appSettings/options {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && isValidOptionsDoc();
+      allow read, write: if request.auth != null;
     }
 
   }
