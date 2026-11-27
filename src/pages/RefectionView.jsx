@@ -1,10 +1,14 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, lazy, Suspense } from 'react';
 import { generateReportPDF, generateIncompleteReportPDF } from '../pdfGenerator';
 import { useRefections } from '../hooks/useRefections';
 import TopoMapPicker from '../components/TopoMapPicker';
+// Map of incomplete entries (copy, 2026-11-27): lazy-loaded like
+// SrmMapPicker, so Leaflet + proj4 are only fetched when the "Carte"
+// view is opened, never in the main bundle.
+const RefectionIncompleteMap = lazy(() => import('../components/RefectionIncompleteMap'));
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
-  Wrench, FileDown, Save, Trash2, Loader2, Search, Plus, X, MapPin, Pencil, Calendar, Camera, Check, Clock, ArrowLeft
+  Wrench, FileDown, Save, Trash2, Loader2, Search, Plus, X, MapPin, Pencil, Calendar, Camera, Check, Clock, ArrowLeft, List, Map as MapIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -108,6 +112,12 @@ export const RefectionView = ({ user }) => {
   const [mode, setMode] = useState(null);
   const completeCount = refections.filter((r) => r.incomplete !== true).length;
   const incompleteCount = refections.filter((r) => r.incomplete === true).length;
+
+  // Liste / Carte toggle (copy, 2026-11-27): Non terminées mode only.
+  // Default is the list; "Carte" replaces the table with the map of
+  // incomplete entries (the form above stays visible). Resets to the
+  // list whenever the mode changes.
+  const [listView, setListView] = useState('liste');
 
   // ✅ NEW: State for the Month Filter
   const [selectedMonth, setSelectedMonth] = useState('');
@@ -215,6 +225,7 @@ export const RefectionView = ({ user }) => {
     setSelectedMonth('');
     setSelectedDay('');
     setSearch('');
+    setListView('liste');
     setMode(m);
   };
 
@@ -223,6 +234,7 @@ export const RefectionView = ({ user }) => {
     setSelectedMonth('');
     setSelectedDay('');
     setSearch('');
+    setListView('liste');
     setMode(null);
   };
 
@@ -850,7 +862,29 @@ export const RefectionView = ({ user }) => {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-            
+
+            {/* Liste / Carte toggle — Non terminées mode only (copy, 2026-11-27) */}
+            {mode === 'incomplete' && (
+              <div className="flex rounded-xl border border-slate-700 overflow-hidden self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setListView('liste')}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold transition ${listView === 'liste' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:text-white'}`}
+                >
+                  <List className="w-3.5 h-3.5" />
+                  Liste
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setListView('carte')}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold transition ${listView === 'carte' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:text-white'}`}
+                >
+                  <MapIcon className="w-3.5 h-3.5" />
+                  Carte
+                </button>
+              </div>
+            )}
+
             {/* ✅ NEW MONTH FILTER */}
             <div className="relative">
               <input
@@ -911,6 +945,16 @@ export const RefectionView = ({ user }) => {
           <p className="text-center text-slate-500 py-10 text-sm">
             {search || selectedMonth || selectedDay ? 'No matching entries' : 'No entries yet'}
           </p>
+        ) : mode === 'incomplete' && listView === 'carte' ? (
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
+              </div>
+            }
+          >
+            <RefectionIncompleteMap entries={filtered} />
+          </Suspense>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-slate-300">
