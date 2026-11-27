@@ -207,29 +207,9 @@ export const generateReportPDF = async (filteredList, selectedMonth, customTitle
 // then a Date | Nature | Quantité restante | Unité | Photo table of what is
 // still needed (date shown once, on the first row of the entry's table,
 // like the completed PDF's merged-date style), plus a summary totalling
-// nature + unit. Photos are best-effort: a photo that cannot be
-// fetched is skipped silently and never breaks the PDF.
-const photoToDataUrl = (url, maxSize = 400) => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.onload = () => {
-      try {
-        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(img.width * scale));
-        canvas.height = Math.max(1, Math.round(img.height * scale));
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/png'));
-      } catch {
-        resolve(null);
-      }
-    };
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
-};
-
+// nature + unit. Photos are links, not images: the Photo column shows a
+// short clickable "Voir photo" link, so the photo takes no vertical
+// space in the PDF and still opens with one tap.
 const formatQtyTotal = (n) => {
   if (n == null || Number.isNaN(n)) return '';
   return String(Math.round(n * 100) / 100);
@@ -302,19 +282,9 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
       nature: rem.nature,
       qty: rem.qty,
       unit: rem.unit || 'm²',
-      photoUrl: rem.photoUrl || null,
-      photoData: null
+      photoUrl: rem.photoUrl || null
     }))
   }));
-
-  // Pre-fetch all reste photos in parallel; each failure resolves to
-  // null, so a photo problem never breaks the PDF.
-  await Promise.all(entries.flatMap(({ lines }) =>
-    lines.map(async (line) => {
-      if (!line.photoUrl) return;
-      line.photoData = await photoToDataUrl(line.photoUrl);
-    })
-  ));
 
   let y = 44;
 
@@ -353,7 +323,7 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
       continue;
     }
 
-    const body = lines.map((line, idx) => [idx === 0 ? (entry.date || '') : '', line.nature, String(line.qty), line.unit, line.photoData ? '' : '—']);
+    const body = lines.map((line, idx) => [idx === 0 ? (entry.date || '') : '', line.nature, String(line.qty), line.unit, line.photoUrl ? 'Voir photo' : '—']);
     autoTable(doc, {
       head: [["Date", "Nature", "Quantité restante", "Unité", "Photo"]],
       body,
@@ -376,25 +346,29 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
       },
       styles: { valign: 'middle', halign: 'left', fontSize: 10, cellPadding: 2 },
       didParseCell: function (data) {
+        // Link cells read as links: blue text on rows that have a photo.
         if (data.cell.section === 'body' && data.column.index === 4) {
           const line = lines[data.row.index];
-          if (line && line.photoData) {
-            data.cell.styles.minCellHeight = 24;
+          if (line && line.photoUrl) {
+            data.cell.styles.textColor = [37, 99, 235];
           }
         }
       },
       didDrawCell: function (data) {
+        // Make the "Voir photo" cell a real clickable link to the photo,
+        // and underline it like a link. The photo itself is never drawn,
+        // so it takes no vertical space in the PDF.
         if (data.cell.section === 'body' && data.column.index === 4) {
           const line = lines[data.row.index];
-          if (line && line.photoData) {
-            const size = 20;
-            const x = data.cell.x + (data.cell.width - size) / 2;
-            const cellY = data.cell.y + (data.cell.height - size) / 2;
-            try {
-              doc.addImage(line.photoData, 'PNG', x, cellY, size, size);
-            } catch {
-              // A bad image never breaks the PDF.
-            }
+          if (line && line.photoUrl) {
+            doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: line.photoUrl });
+            const text = 'Voir photo';
+            const textWidth = doc.getTextWidth(text);
+            const x0 = data.cell.x + (data.cell.width - textWidth) / 2;
+            const underlineY = data.cell.y + data.cell.height / 2 + 2.5;
+            doc.setDrawColor(37, 99, 235);
+            doc.setLineWidth(0.2);
+            doc.line(x0, underlineY, x0 + textWidth, underlineY);
           }
         }
       }
