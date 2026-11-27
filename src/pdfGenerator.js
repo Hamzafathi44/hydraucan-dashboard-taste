@@ -36,12 +36,20 @@ const buildBody = (entries) => {
   const merges = [];
 
   const expanded = entries.map(entry => {
-    const mList = entry.measurements && entry.measurements.length > 0
-        ? entry.measurements
+    const hasMeasurements = entry.measurements && entry.measurements.length > 0;
+    const cleanRemaining = (entry.remaining || [])
+      .filter((rem) => rem.nature && rem.qty !== '' && rem.qty != null);
+    // Incomplete entries hold no measurements (copy, 2026-11-27): do
+    // not render an empty measurement row for them — their "Reste à
+    // faire" lines are the rows instead (nature / qty / unit).
+    const mList = hasMeasurements
+      ? entry.measurements
+      : cleanRemaining.length > 0
+        ? cleanRemaining.map((rem) => ({ nature: rem.nature, l: String(rem.qty), L: rem.unit || 'm²' }))
         : [{ l: entry.l || '', L: entry.L || '', nature: entry.nature || entry.terrainNature || '' }];
     const pts = formatPoints(entry.points);
     const totalRows = Math.max(mList.length, entry.points ? entry.points.length : 1);
-    return { entry, mList, pts, totalRows };
+    return { entry, mList, pts, totalRows, renderedRemainingAsRows: !hasMeasurements && cleanRemaining.length > 0 };
   });
 
   // Group by Date
@@ -60,7 +68,7 @@ const buildBody = (entries) => {
     }
 
     for (let k = i; k < j; k++) {
-      const { entry, mList, pts, totalRows } = expanded[k];
+      const { entry, mList, pts, totalRows, renderedRemainingAsRows } = expanded[k];
 
       if (totalRows > 1) {
         merges.push({ col: 1, startRow: currentRow, rowSpan: totalRows }); // Ref
@@ -69,9 +77,11 @@ const buildBody = (entries) => {
       }
 
       // Incomplete entries (copy, 2026-11-27): the Type cell carries the
-      // "Incomplète" marker and the address cell lists what is left to
-      // do ("Reste : ..."), in both the per-entry and the monthly PDF.
-      // Photos stay in the app only — they are not embedded here.
+      // "Incomplète" marker. When the reste lines are rendered as rows
+      // (no measurements), the address cell does NOT repeat them; when
+      // the entry has measurements too (older incomplete entries), the
+      // address cell lists what is left ("Reste : ..."), in both the
+      // per-entry and the monthly PDF. Photos stay in the app only.
       const isIncomplete = entry.incomplete === true;
       const remainingText = (entry.remaining || [])
         .filter((rem) => rem.nature && rem.qty !== '' && rem.qty != null)
@@ -84,7 +94,7 @@ const buildBody = (entries) => {
           isFirst && k === i ? (entry.date || '') : '',
           isFirst ? (entry.reference || '') : '',
           isFirst ? ((entry.type || '') + (isIncomplete ? ' (Incomplète)' : '')) : '',
-          isFirst ? ((entry.address || entry.material || '') + (isIncomplete && remainingText ? `\nReste : ${remainingText}` : '')) : '',
+          isFirst ? ((entry.address || entry.material || '') + (isIncomplete && remainingText && !renderedRemainingAsRows ? `\nReste : ${remainingText}` : '')) : '',
           m.nature || '',
           m.l || '',
           m.L || '',

@@ -127,14 +127,16 @@ export const RefectionView = ({ user }) => {
     { l: '', L: '', nature: '', photoUrl: null, photoData: null }
   ]);
 
-  // "Reste à faire" lines, shown when the entry is marked "Non terminée":
-  // { nature, qty, unit } — nature from NATURES (no Béton), unit m² or m.
+  // "Reste à faire" lines, shown in Non completed mode only: { nature,
+  // qty, unit, photoUrl } — nature from NATURES (no Béton), unit m² or
+  // m. Each line has its own photo proof (photoData holds the picked
+  // image until it is uploaded on save).
   const [remaining, setRemaining] = useState([
-    { nature: '', qty: '', unit: 'm²' }
+    { nature: '', qty: '', unit: 'm²', photoUrl: null, photoData: null }
   ]);
 
-  // Hidden file inputs for the per-measurement photo proof, one per row.
-  const photoInputs = useRef({});
+  // Hidden file inputs for the per-reste-line photo proof, one per row.
+  const restePhotoInputs = useRef({});
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -162,7 +164,7 @@ export const RefectionView = ({ user }) => {
   };
 
   const addRemaining = () => {
-    setRemaining([...remaining, { nature: '', qty: '', unit: 'm²' }]);
+    setRemaining([...remaining, { nature: '', qty: '', unit: 'm²', photoUrl: null, photoData: null }]);
   };
 
   const removeRemaining = (index) => {
@@ -170,7 +172,7 @@ export const RefectionView = ({ user }) => {
     setRemaining(remaining.filter((_, i) => i !== index));
   };
 
-  const handlePhotoPicked = (index, file) => {
+  const handleRemainingPhotoPicked = (index, file) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       toast.error('Choisissez une image');
@@ -183,16 +185,16 @@ export const RefectionView = ({ user }) => {
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result;
-      setMeasurements((prev) =>
-        prev.map((m, i) => (i === index ? { ...m, photoData: dataUrl } : m))
+      setRemaining((prev) =>
+        prev.map((r, i) => (i === index ? { ...r, photoData: dataUrl } : r))
       );
     };
     reader.readAsDataURL(file);
   };
 
-  const removePhoto = (index) => {
-    setMeasurements((prev) =>
-      prev.map((m, i) => (i === index ? { ...m, photoUrl: null, photoData: null } : m))
+  const removeRemainingPhoto = (index) => {
+    setRemaining((prev) =>
+      prev.map((r, i) => (i === index ? { ...r, photoUrl: null, photoData: null } : r))
     );
   };
 
@@ -203,7 +205,7 @@ export const RefectionView = ({ user }) => {
     const m = forMode !== undefined ? forMode : mode;
     setFormData({ date: '', reference: '', type: 'Refection', address: '', incomplete: m === 'incomplete' });
     setMeasurements([{ l: '', L: '', nature: '', photoUrl: null, photoData: null }]);
-    setRemaining([{ nature: '', qty: '', unit: 'm²' }]);
+    setRemaining([{ nature: '', qty: '', unit: 'm²', photoUrl: null, photoData: null }]);
     setMapPoints([]);
     setEditingId(null);
   };
@@ -241,8 +243,8 @@ export const RefectionView = ({ user }) => {
 
     setRemaining(
       entry.remaining && entry.remaining.length > 0
-        ? entry.remaining.map((r) => ({ nature: r.nature || '', qty: r.qty ?? '', unit: r.unit || 'm²' }))
-        : [{ nature: '', qty: '', unit: 'm²' }]
+        ? entry.remaining.map((r) => ({ nature: r.nature || '', qty: r.qty ?? '', unit: r.unit || 'm²', photoUrl: r.photoUrl || null, photoData: null }))
+        : [{ nature: '', qty: '', unit: 'm²', photoUrl: null, photoData: null }]
     );
 
     setMapPoints(entry.points || []);
@@ -257,49 +259,65 @@ export const RefectionView = ({ user }) => {
       return;
     }
 
-    const cleanMeasurements = measurements.filter(
-      (m) => m.l !== '' && m.L !== '' && m.nature !== ''
-    );
-
-    if (cleanMeasurements.length === 0) {
-      toast.error('Add at least one measurement (l, L, nature)');
-      return;
-    }
-
-    // Photos are uploaded on save only (same Cloudinary-first route as
-    // Enveloppe proofs). A failed upload never blocks the save: the
-    // entry is saved without the new photo and an error toast is shown.
-    // The previously stored photo (if any) is kept when an upload fails.
-    setSaving(true);
-    const savedMeasurements = await Promise.all(
-      cleanMeasurements.map(async (m, idx) => {
-        let photoUrl = m.photoUrl || null;
-        if (m.photoData) {
-          try {
-            photoUrl = await uploadMeasurementPhoto(
-              m.photoData,
-              `refection-${Date.now()}-${idx}.jpg`,
-              user?.uid
-            );
-          } catch (err) {
-            console.error('Photo upload failed:', err?.message || err);
-            toast.error('Échec de l’envoi de la photo — l’entrée est enregistrée sans photo');
-          }
-        }
-        return { l: m.l, L: m.L, nature: m.nature, photoUrl };
-      })
-    );
-
     // The entry's status follows the selected mode for new entries, and
     // the entry's current status when editing (there is no checkbox any
     // more, so editing never flips it silently).
     const entryIncomplete = editingId ? !!formData.incomplete : mode === 'incomplete';
-    // "Reste à faire" is only stored for incomplete entries.
-    const cleanRemaining = entryIncomplete
-      ? remaining
-          .filter((r) => r.nature && String(r.qty).trim() !== '')
-          .map((r) => ({ nature: r.nature, qty: String(r.qty).trim(), unit: r.unit || 'm²' }))
+
+    // One form fills one kind only (copy, 2026-11-27): Complete mode
+    // has measurements and no "Reste à faire"; Non completed mode has
+    // "Reste à faire" and no measurements — an incomplete entry is
+    // saved with measurements: [].
+    const cleanMeasurements = entryIncomplete
+      ? []
+      : measurements.filter(
+          (m) => m.l !== '' && m.L !== '' && m.nature !== ''
+        );
+
+    if (!entryIncomplete && cleanMeasurements.length === 0) {
+      toast.error('Add at least one measurement (l, L, nature)');
+      return;
+    }
+
+    const cleanRemainingRaw = entryIncomplete
+      ? remaining.filter((r) => r.nature && String(r.qty).trim() !== '')
       : [];
+
+    if (entryIncomplete && cleanRemainingRaw.length === 0) {
+      toast.error('Ajoutez au moins une ligne de reste à faire');
+      return;
+    }
+
+    // Photos on the "Reste à faire" lines are uploaded on save only
+    // (same Cloudinary-first route as the measurement proofs). A failed
+    // upload never blocks the save: the line is saved without the new
+    // photo and an error toast is shown. The previously stored photo
+    // (if any) is kept when an upload fails.
+    setSaving(true);
+    const savedRemaining = await Promise.all(
+      cleanRemainingRaw.map(async (r, idx) => {
+        let photoUrl = r.photoUrl || null;
+        if (r.photoData) {
+          try {
+            photoUrl = await uploadMeasurementPhoto(
+              r.photoData,
+              `refection-reste-${Date.now()}-${idx}.jpg`,
+              user?.uid
+            );
+          } catch (err) {
+            console.error('Photo upload failed:', err?.message || err);
+            toast.error('Échec de l’envoi de la photo — la ligne est enregistrée sans photo');
+          }
+        }
+        return { nature: r.nature, qty: String(r.qty).trim(), unit: r.unit || 'm²', photoUrl };
+      })
+    );
+
+    // Measurements keep their stored photoUrl (the form no longer has a
+    // photo button for them), so already-stored photos survive an edit.
+    const savedMeasurements = cleanMeasurements.map((m) => ({
+      l: m.l, L: m.L, nature: m.nature, photoUrl: m.photoUrl || null
+    }));
 
     let result;
 
@@ -309,7 +327,7 @@ export const RefectionView = ({ user }) => {
         measurements: savedMeasurements,
         points: mapPoints,
         incomplete: entryIncomplete,
-        remaining: cleanRemaining
+        remaining: savedRemaining
       });
     } else {
       result = await addRefection({
@@ -317,7 +335,7 @@ export const RefectionView = ({ user }) => {
         measurements: savedMeasurements,
         points: mapPoints,
         incomplete: entryIncomplete,
-        remaining: cleanRemaining
+        remaining: savedRemaining
       });
     }
 
@@ -578,58 +596,101 @@ export const RefectionView = ({ user }) => {
             </div>
 
             <div className="space-y-2">
-              {remaining.map((rem, idx) => (
-                <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-5">
-                    <select
-                      value={rem.nature}
-                      onChange={(e) => handleRemainingChange(idx, 'nature', e.target.value)}
-                      className={inputClass}
-                    >
-                      <option value="">-- Nature --</option>
-                      {NATURES.map((n) => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
+              {remaining.map((rem, idx) => {
+                const remPreview = rem.photoData || rem.photoUrl;
+                return (
+                <div key={idx} className="rounded-xl border border-amber-500/20 bg-slate-900/40 p-3 space-y-2">
+                  <div className="grid grid-cols-12 gap-2 items-center">
+                    <div className="col-span-5">
+                      <select
+                        value={rem.nature}
+                        onChange={(e) => handleRemainingChange(idx, 'nature', e.target.value)}
+                        className={inputClass}
+                      >
+                        <option value="">-- Nature --</option>
+                        {NATURES.map((n) => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-3">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={rem.qty}
+                        onChange={(e) => handleRemainingChange(idx, 'qty', e.target.value)}
+                        placeholder="Quantité"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <select
+                        value={rem.unit}
+                        onChange={(e) => handleRemainingChange(idx, 'unit', e.target.value)}
+                        className={inputClass}
+                      >
+                        {REMAINING_UNITS.map((u) => (
+                          <option key={u} value={u}>{u}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => removeRemaining(idx)}
+                        disabled={remaining.length === 1}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg p-2 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="col-span-3">
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={rem.qty}
-                      onChange={(e) => handleRemainingChange(idx, 'qty', e.target.value)}
-                      placeholder="Quantité"
-                      className={inputClass}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <select
-                      value={rem.unit}
-                      onChange={(e) => handleRemainingChange(idx, 'unit', e.target.value)}
-                      className={inputClass}
-                    >
-                      {REMAINING_UNITS.map((u) => (
-                        <option key={u} value={u}>{u}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col-span-2 flex justify-end">
+                  <div className="flex items-center gap-2">
+                    {remPreview && (
+                      <img
+                        src={remPreview}
+                        alt="Preuve"
+                        onClick={() => window.open(remPreview, '_blank')}
+                        className="w-12 h-12 object-cover rounded-lg border border-slate-700 cursor-pointer"
+                        title="Voir la preuve"
+                      />
+                    )}
                     <button
                       type="button"
-                      onClick={() => removeRemaining(idx)}
-                      disabled={remaining.length === 1}
-                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg p-2 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                      onClick={() => restePhotoInputs.current[idx]?.click()}
+                      className="flex items-center gap-1.5 text-xs font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-lg transition"
                     >
-                      <X className="w-4 h-4" />
+                      <Camera className="w-3.5 h-3.5" />
+                      {remPreview ? 'Changer la photo' : 'Photo'}
                     </button>
+                    {remPreview && (
+                      <button
+                        type="button"
+                        onClick={() => removeRemainingPhoto(idx)}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg p-1.5 transition"
+                        title="Retirer la photo"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                    <span className="text-[11px] text-slate-500">Preuve de la nature (optionnel)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      ref={(el) => { restePhotoInputs.current[idx] = el; }}
+                      className="hidden"
+                      onChange={(e) => { handleRemainingPhotoPicked(idx, e.target.files?.[0]); e.target.value = ''; }}
+                    />
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
 
+        {!formData.incomplete && (
         <div className="mt-6">
           <div className="flex items-center justify-between mb-3">
             <label className={labelClass}>Measurements (l × L — each with its own nature)</label>
@@ -649,7 +710,6 @@ export const RefectionView = ({ user }) => {
                 m.l && m.L
                   ? (parseFloat(m.l) * parseFloat(m.L)).toFixed(2)
                   : '';
-              const preview = m.photoData || m.photoUrl;
               // Béton is no longer offered for new lines, but an entry
               // stored with Béton keeps it selectable while editing.
               const natureOptions = m.nature === 'Béton' ? [...NATURES, 'Béton'] : NATURES;
@@ -707,48 +767,11 @@ export const RefectionView = ({ user }) => {
                       </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {preview && (
-                      <img
-                        src={preview}
-                        alt="Preuve"
-                        onClick={() => window.open(preview, '_blank')}
-                        className="w-12 h-12 object-cover rounded-lg border border-slate-700 cursor-pointer"
-                        title="Voir la preuve"
-                      />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => photoInputs.current[idx]?.click()}
-                      className="flex items-center gap-1.5 text-xs font-bold text-cyan-300 hover:text-cyan-200 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 px-3 py-1.5 rounded-lg transition"
-                    >
-                      <Camera className="w-3.5 h-3.5" />
-                      {preview ? 'Changer la photo' : 'Photo'}
-                    </button>
-                    {preview && (
-                      <button
-                        type="button"
-                        onClick={() => removePhoto(idx)}
-                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg p-1.5 transition"
-                        title="Retirer la photo"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                    <span className="text-[11px] text-slate-500">Preuve de la nature (optionnel)</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      ref={(el) => { photoInputs.current[idx] = el; }}
-                      className="hidden"
-                      onChange={(e) => { handlePhotoPicked(idx, e.target.files?.[0]); e.target.value = ''; }}
-                    />
-                  </div>
                 </div>
               );
             })}
           </div>
-        </div>
+        </div>)}
 
         <div className="flex items-center gap-3 mt-6">
           <button
@@ -915,6 +938,20 @@ export const RefectionView = ({ user }) => {
                               <div>{r.address || ''}</div>
                               {r.incomplete === true && remainingText && (
                                 <div className="mt-1 text-[10px] text-amber-300/90">Reste : {remainingText}</div>
+                              )}
+                              {r.incomplete === true && (r.remaining || []).some((rem) => rem.photoUrl) && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {(r.remaining || []).filter((rem) => rem.photoUrl).map((rem, ri) => (
+                                    <img
+                                      key={ri}
+                                      src={rem.photoUrl}
+                                      alt={rem.nature || 'Preuve'}
+                                      onClick={() => window.open(rem.photoUrl, '_blank')}
+                                      className="w-8 h-8 object-cover rounded cursor-pointer border border-slate-700"
+                                      title={`Preuve — ${rem.nature || ''}`}
+                                    />
+                                  ))}
+                                </div>
                               )}
                             </td>
                           </>
