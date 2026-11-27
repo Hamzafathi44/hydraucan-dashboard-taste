@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { LoginForm } from './components/LoginForm';
@@ -196,6 +196,33 @@ const AuthenticatedApp = ({ user, activeView, setActiveView, theme, onToggleThem
 
 const KNOWN_VIEWS = ['home', 'pointage', 'rapport', 'refection', 'statistics', 'fichier', 'srm-excel', 'enveloppe', 'settings'];
 
+// Clean URL per view (copy only, 2026-11-27): the address bar used to
+// stay at the root no matter which view was open. Each view now has
+// its own path — e.g. Réfection is /refections — so a view can be
+// linked, bookmarked and refreshed. Minimal history-based router, no
+// new dependency: the app's navigation is a single state variable,
+// so pushState + popstate cover it. The login screen still shows
+// when signed out regardless of the path.
+const VIEW_PATHS = {
+  home: '/',
+  pointage: '/pointage',
+  rapport: '/rapport-mensuel',
+  refection: '/refections',
+  statistics: '/statistiques',
+  fichier: '/exploitation-eau',
+  'srm-excel': '/import-excel',
+  enveloppe: '/enveloppe',
+  settings: '/parametres',
+};
+const PATH_TO_VIEW = Object.fromEntries(
+  Object.entries(VIEW_PATHS).map(([view, path]) => [path, view]),
+);
+// Normalise a pathname for lookup: drop a trailing slash, keep '/'.
+const viewFromPath = (pathname) => {
+  const clean = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  return PATH_TO_VIEW[clean] || null;
+};
+
 function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -205,8 +232,14 @@ function App() {
   // restored on load (invalid values fall back to 'home'), so a
   // refresh on Réfection stays on Réfection — and the same holds for
   // every other view. No view file, data or route was changed.
+  // Routing (copy only, 2026-11-27): a real path segment in the URL
+  // always wins over the stored value. On plain '/' the stored view
+  // still applies as a fallback (and the URL is then normalised to
+  // that view's path, so the address bar always matches the view).
   const [activeView, setActiveView] = useState(() => {
     try {
+      const fromPath = typeof window !== 'undefined' ? viewFromPath(window.location.pathname) : null;
+      if (fromPath) return fromPath;
       const saved = localStorage.getItem('hydraucan-active-view');
       return KNOWN_VIEWS.includes(saved) ? saved : 'home';
     } catch { return 'home'; }
@@ -214,6 +247,44 @@ function App() {
   useEffect(() => {
     try { localStorage.setItem('hydraucan-active-view', activeView); } catch { /* storage unavailable — keep in-memory default */ }
   }, [activeView]);
+  // Sidebar (and any other) navigation goes through here so the
+  // address bar follows the view. Same view re-clicked: no new
+  // history entry. Back/forward buttons are handled by the popstate
+  // listener below, which syncs state from the URL.
+  const navigateToView = useCallback((view) => {
+    if (!KNOWN_VIEWS.includes(view)) return;
+    const path = VIEW_PATHS[view];
+    try {
+      if (window.location.pathname !== path) window.history.pushState(null, '', path);
+    } catch { /* history unavailable — state still updates below */ }
+    setActiveView(view);
+  }, []);
+  useEffect(() => {
+    const onPopState = () => {
+      const view = viewFromPath(window.location.pathname);
+      if (view) { setActiveView(view); return; }
+      // Unknown path reached via back/forward: back to the dashboard.
+      try { window.history.replaceState(null, '', '/'); } catch { /* ignore */ }
+      setActiveView('home');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+  // One-time URL normalisation on load: unknown path -> '/', and
+  // plain '/' with a stored non-home view -> that view's path.
+  useEffect(() => {
+    const view = viewFromPath(window.location.pathname);
+    if (!view) {
+      if (window.location.pathname !== '/') {
+        try { window.history.replaceState(null, '', '/'); } catch { /* ignore */ }
+      }
+      return;
+    }
+    if (window.location.pathname === '/' && activeView !== 'home') {
+      try { window.history.replaceState(null, '', VIEW_PATHS[activeView]); } catch { /* ignore */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('hydraucan-theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
   });
@@ -315,7 +386,7 @@ function App() {
   return (
     <Motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: 'easeOut' }}>
       <Toaster position="top-right" richColors />
-      <AuthenticatedApp user={user} activeView={activeView} setActiveView={setActiveView} theme={theme} onToggleTheme={toggleTheme} accent={accent} onAccentChange={setAccent} isThemeExempt={isThemeExempt} effectiveTheme={effectiveTheme} effectiveAccent={effectiveAccent} />
+      <AuthenticatedApp user={user} activeView={activeView} setActiveView={navigateToView} theme={theme} onToggleTheme={toggleTheme} accent={accent} onAccentChange={setAccent} isThemeExempt={isThemeExempt} effectiveTheme={effectiveTheme} effectiveAccent={effectiveAccent} />
     </Motion.div>
   );
 }
