@@ -14,6 +14,12 @@
   --color-line: #EDEDED;
   --color-accent: #16294D;
   --color-sidebar: #EDF1F5;
+  /* Look phase (2026-11-26): brand teal for spent totals/badges and
+     light surface tokens for natively-light views (Enveloppe). */
+  --color-brand-teal: #0F766E;
+  --color-surface: #FFFFFF;
+  --color-surface-subtle: #F8FAFC;
+  --color-border: #E2E8F0;
 
   /* Audit finding 10 (copy only): shared easing tokens, from
      Emil's AUDIT.md — one curve for UI entrances, not five
@@ -118,9 +124,11 @@ html.theme-dark[data-accent="navy"] { --color-accent: #8AA0BC; }
   }
 
   /* White sheet: butts against the sidebar/top bar, inset 8px from
-     the right and bottom edges, 16px radius, 1px edge, no shadow. */
+     the right and bottom edges, 16px radius, 1px edge, no shadow.
+     Phone & UX phase (2026-11-26): tighter padding and no rounding
+     or outer margins on phones, so the sheet uses the full width. */
   .main-content {
-    @apply flex-1 p-6 w-full min-w-0 bg-white border border-line rounded-2xl my-0 mr-2 mb-2 mt-0 overflow-hidden;
+    @apply flex-1 p-3 sm:p-4 md:p-6 w-full min-w-0 bg-white border border-line rounded-none sm:rounded-2xl my-0 mr-0 mb-0 md:mr-2 md:mb-2 mt-0 overflow-hidden;
     border-width: 2px;
     border-color: #D4DAE1;
     box-shadow: 0 2px 12px rgba(22, 41, 77, 0.06);
@@ -170,7 +178,7 @@ html.theme-dark[data-accent="navy"] { --color-accent: #8AA0BC; }
   }
 
   .input-field {
-    @apply w-full px-4 py-3 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-900 placeholder:text-slate-400 transition-[color,background-color,border-color,transform,opacity] focus:outline-none focus:ring-2 focus:ring-[#16294D]/20 focus:border-[#16294D];
+    @apply w-full px-4 py-3 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-900 placeholder:text-slate-400 transition-[color,background-color,border-color,transform,opacity] focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent;
   }
 
   select.input-field {
@@ -181,12 +189,14 @@ html.theme-dark[data-accent="navy"] { --color-accent: #8AA0BC; }
     padding-right: 2.5rem;
   }
 
+  /* Look phase (2026-11-26): primary actions follow the chosen accent
+     (navy by default) instead of a hardcoded navy hex. */
   .btn-primary {
-    @apply px-6 py-3 bg-[#16294D] text-white text-sm font-semibold rounded-lg transition-[color,background-color,border-color,transform,opacity] hover:bg-[#0F1E3D] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2;
+    @apply px-6 py-3 bg-accent text-white text-sm font-semibold rounded-lg transition-[color,background-color,border-color,transform,opacity] hover:brightness-110 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2;
   }
 
   .btn-accent {
-    @apply px-6 py-3 bg-[#16294D] text-white text-sm font-semibold rounded-lg transition-[color,background-color,border-color,transform,opacity] hover:bg-[#0F1E3D] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2;
+    @apply px-6 py-3 bg-accent text-white text-sm font-semibold rounded-lg transition-[color,background-color,border-color,transform,opacity] hover:brightness-110 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2;
   }
 
   .month-pill {
@@ -194,11 +204,17 @@ html.theme-dark[data-accent="navy"] { --color-accent: #8AA0BC; }
   }
 
   .month-pill-active {
-    @apply bg-[#16294D] text-white border-[#16294D] font-black;
+    @apply bg-accent text-white border-accent font-black;
   }
 
   .search-bar {
-    @apply flex items-center gap-3 px-4 py-2.5 bg-white border border-slate-200 rounded-lg w-full max-w-md focus-within:ring-2 focus-within:ring-[#16294D]/15 focus-within:border-[#16294D] transition-[color,background-color,border-color,transform,opacity] text-slate-900;
+    @apply flex items-center gap-3 px-4 py-2.5 bg-white border border-slate-200 rounded-lg w-full max-w-md focus-within:ring-2 focus-within:ring-accent/15 focus-within:border-accent transition-[color,background-color,border-color,transform,opacity] text-slate-900;
+  }
+
+  /* Look phase (2026-11-26): tabular figures for money columns so
+     amounts line up instead of wobbling between rows. */
+  .num-tabular {
+    font-variant-numeric: tabular-nums;
   }
 
   .scrollbar-hide::-webkit-scrollbar {
@@ -209,27 +225,6 @@ html.theme-dark[data-accent="navy"] { --color-accent: #8AA0BC; }
     scrollbar-width: none;
   }
 
-  .uisocial-card {
-    @apply bg-white rounded-[48px] shadow-[0_80px_160px_rgba(0,0,0,0.8)] overflow-hidden;
-    animation: cardAppear 0.8s var(--ease-out);
-  }
-  
-  .uisocial-input {
-    @apply w-full px-5 py-4 bg-[#F9FAFB] border border-slate-100 rounded-2xl text-slate-900 text-sm font-medium placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-[#1A2B56]/5 focus:border-[#1A2B56]/20 transition-[color,background-color,border-color,transform,opacity];
-  }
-  
-  .uisocial-btn-primary {
-    @apply w-full py-5 bg-[#1A2B56] hover:bg-[#152345] text-white text-base font-black rounded-2xl shadow-[0_12px_24px_rgba(26,43,86,0.3)] transition-[color,background-color,border-color,transform,opacity] active:scale-[0.98] tracking-tight;
-  }
-
-  .uisocial-btn-google {
-    @apply w-full py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-2xl flex items-center justify-center gap-3 transition-[color,background-color,border-color,transform,opacity] shadow-sm;
-  }
-
-  @keyframes cardAppear {
-    from { opacity: 0; transform: translateY(40px) scale(0.98); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
-  }
 }
 
 /* --- Responsive / touch improvements (layout only, no logic changes) --- */
@@ -243,9 +238,11 @@ html.theme-dark[data-accent="navy"] { --color-accent: #8AA0BC; }
 @media (max-width: 767px) {
   /* Taste shell: the mobile menu button now lives in the header
      row, not fixed at the top-right, so no extra top padding. */
-  /* Data rows keep their 6-column layout and scroll sideways instead of crushing. */
+  /* Phone & UX phase (2026-11-26): data rows wrap into two columns
+     instead of forcing a 620px sideways scroll. */
   .data-row {
-    min-width: 620px;
+    min-width: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   /* 16px stops iOS Safari auto-zooming when a field is focused. */
   input, select, textarea {
@@ -257,10 +254,21 @@ html.theme-dark[data-accent="navy"] { --color-accent: #8AA0BC; }
   [class*="group-hover:opacity-100"] {
     opacity: 1 !important;
   }
+  /* Phone & UX phase (2026-11-26): receipt thumbnails are the
+     exception — their hover-only controls stay hidden on touch;
+     ProofSlot gives them a dedicated corner button instead. */
+  .proof-thumb [class*="group-hover:opacity-100"] {
+    opacity: 0 !important;
+  }
   /* Audit finding 11 (copy only): hover scale is gated to devices
      with a fine pointer — on touch it would otherwise stick on tap. */
   [class*="hover:scale-"] {
     scale: 1 !important;
+  }
+  /* Phone & UX phase (2026-11-26): 44px minimum touch targets for
+     the main interactive controls. */
+  .month-pill, .btn-primary, .btn-accent, .input-field {
+    min-height: 44px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -277,38 +285,42 @@ html.theme-dark[data-accent="navy"] { --color-accent: #8AA0BC; }
 }
 
 /* ---- Company light theme: translate old dark dashboard classes ---- */
+/* Look phase (2026-11-26): scoped to main:not(.theme-exempt) —
+   the Enveloppe view is theme-exempt and now uses native light
+   classes, so the shim must not rewrite it. Other views still
+   use dark classes and depend on this shim in light mode. */
 /* Taste fix: this old rule forced <main> back to slate, which wiped
    out the white framed-sheet. The sheet itself must stay white in
    light mode; the frame around it is the tinted #EDF1F5. */
-html:not(.theme-dark) main.main-content { background: #ffffff; }
-html:not(.theme-dark) main .bg-slate-900\/40, html:not(.theme-dark) main .bg-slate-900\/60, html:not(.theme-dark) main .bg-slate-900\/50, html:not(.theme-dark) main .bg-slate-900\/30,
-html:not(.theme-dark) main .bg-slate-900\/80, html:not(.theme-dark) main .bg-slate-800\/80, html:not(.theme-dark) main .bg-slate-800\/50, html:not(.theme-dark) main .bg-slate-800\/40 {
+html:not(.theme-dark) main:not(.theme-exempt).main-content { background: #ffffff; }
+html:not(.theme-dark) main:not(.theme-exempt) .bg-slate-900\/40, html:not(.theme-dark) main:not(.theme-exempt) .bg-slate-900\/60, html:not(.theme-dark) main:not(.theme-exempt) .bg-slate-900\/50, html:not(.theme-dark) main:not(.theme-exempt) .bg-slate-900\/30,
+html:not(.theme-dark) main:not(.theme-exempt) .bg-slate-900\/80, html:not(.theme-dark) main:not(.theme-exempt) .bg-slate-800\/80, html:not(.theme-dark) main:not(.theme-exempt) .bg-slate-800\/50, html:not(.theme-dark) main:not(.theme-exempt) .bg-slate-800\/40 {
   background-color: #ffffff !important;
   border-color: #E2E8F0 !important;
 }
-html:not(.theme-dark) main .bg-white\/5 { background-color: #F8FAFC !important; }
-html:not(.theme-dark) main .bg-white\/10 { background-color: #F1F5F9 !important; }
-html:not(.theme-dark) main .bg-slate-50\/50 { background-color: #F8FAFC !important; }
-html:not(.theme-dark) main .text-white:not(button) { color: #0F172A !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .bg-white\/5 { background-color: #F8FAFC !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .bg-white\/10 { background-color: #F1F5F9 !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .bg-slate-50\/50 { background-color: #F8FAFC !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .text-white:not(button) { color: #0F172A !important; }
 /* Buttons on a light background must not stay white-on-white: the old
    dark-theme classes bg-white/5 and bg-white/10 become light in this theme. */
-html:not(.theme-dark) main button.bg-white\/5, html:not(.theme-dark) main button.bg-white\/10 { color: #0F172A !important; }
-html:not(.theme-dark) main button.bg-white\/5:hover, html:not(.theme-dark) main button.bg-white\/10:hover { color: #0F172A !important; }
-html:not(.theme-dark) main .text-slate-200 { color: #334155 !important; }
-html:not(.theme-dark) main .text-slate-300 { color: #475569 !important; }
-html:not(.theme-dark) main input.bg-slate-900\/60, html:not(.theme-dark) main input.bg-slate-800, html:not(.theme-dark) main select.bg-slate-900\/60,
-html:not(.theme-dark) main textarea.bg-slate-900\/60, html:not(.theme-dark) main .bg-slate-900\/60 input {
+html:not(.theme-dark) main:not(.theme-exempt) button.bg-white\/5, html:not(.theme-dark) main:not(.theme-exempt) button.bg-white\/10 { color: #0F172A !important; }
+html:not(.theme-dark) main:not(.theme-exempt) button.bg-white\/5:hover, html:not(.theme-dark) main:not(.theme-exempt) button.bg-white\/10:hover { color: #0F172A !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .text-slate-200 { color: #334155 !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .text-slate-300 { color: #475569 !important; }
+html:not(.theme-dark) main:not(.theme-exempt) input.bg-slate-900\/60, html:not(.theme-dark) main:not(.theme-exempt) input.bg-slate-800, html:not(.theme-dark) main:not(.theme-exempt) select.bg-slate-900\/60,
+html:not(.theme-dark) main:not(.theme-exempt) textarea.bg-slate-900\/60, html:not(.theme-dark) main:not(.theme-exempt) .bg-slate-900\/60 input {
   background-color: #ffffff !important; color: #0F172A !important; border-color: #CBD5E1 !important;
 }
-html:not(.theme-dark) main .border-slate-700 { border-color: #CBD5E1 !important; }
-html:not(.theme-dark) main .border-slate-800 { border-color: #E2E8F0 !important; }
-html:not(.theme-dark) main .border-slate-600 { border-color: #CBD5E1 !important; }
-html:not(.theme-dark) main .hover\:bg-white\/5:hover { background-color: #F1F5F9 !important; }
-html:not(.theme-dark) main .hover\:bg-white\/10:hover { background-color: #F1F5F9 !important; }
-html:not(.theme-dark) main .hover\:bg-slate-800\/40:hover { background-color: #F1F5F9 !important; }
-html:not(.theme-dark) main .recharts-cartesian-grid line { stroke: #E2E8F0 !important; }
-html:not(.theme-dark) main .recharts-legend-item-text { fill: #475569 !important; color: #475569 !important; }
-html:not(.theme-dark) main .recharts-tooltip-wrapper { filter: drop-shadow(0 8px 16px rgba(15,23,42,0.12)); }
+html:not(.theme-dark) main:not(.theme-exempt) .border-slate-700 { border-color: #CBD5E1 !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .border-slate-800 { border-color: #E2E8F0 !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .border-slate-600 { border-color: #CBD5E1 !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .hover\:bg-white\/5:hover { background-color: #F1F5F9 !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .hover\:bg-white\/10:hover { background-color: #F1F5F9 !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .hover\:bg-slate-800\/40:hover { background-color: #F1F5F9 !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .recharts-cartesian-grid line { stroke: #E2E8F0 !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .recharts-legend-item-text { fill: #475569 !important; color: #475569 !important; }
+html:not(.theme-dark) main:not(.theme-exempt) .recharts-tooltip-wrapper { filter: drop-shadow(0 8px 16px rgba(15,23,42,0.12)); }
 
 /* ---- Dark mode (theme-dark): restore original dark look ---- */
 html.theme-dark body { background: #0B1220; color: #F1F5F9; }

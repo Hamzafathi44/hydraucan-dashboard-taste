@@ -24,7 +24,7 @@ export const formatMaterialsData = (data) => {
   return parts.join(' ');
 };
 
-export const useDashboardData = (user) => {
+export const useDashboardData = (user, enabled = true) => {
   const [dataList, setDataList] = useState([]);
   const [formData, setFormData] = useState({ 
     date: '', reference: '', type: '', material: '', nature: '',
@@ -57,6 +57,7 @@ export const useDashboardData = (user) => {
 
   // 2. Load Settings (Options)
   useEffect(() => {
+    if (!enabled) return;
     const loadOptions = async () => {
       const docRef = doc(db, "appSettings", "options");
       const docSnap = await getDoc(docRef);
@@ -67,7 +68,7 @@ export const useDashboardData = (user) => {
       }
     };
     loadOptions();
-  }, []);
+  }, [enabled]);
 
   const saveOptions = async (newTypeOptions, newNatureOptions) => {
     try {
@@ -111,7 +112,7 @@ export const useDashboardData = (user) => {
 
   // 3. Load Reports (Multi-Tenant)
   useEffect(() => {
-    if (!user) return;
+    if (!user || !enabled) return;
     
     // MULTI-TENANT QUERY: documents WITH a userId are restricted to their
     // owner; legacy documents without a userId are shown to every
@@ -128,7 +129,7 @@ export const useDashboardData = (user) => {
     });
     
     return () => unsubscribe();
-  }, [user]);
+  }, [user, enabled]);
 
   // 4. Pagination & Filters
   useEffect(() => {

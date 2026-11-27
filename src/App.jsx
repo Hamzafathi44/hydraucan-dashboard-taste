@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { LoginForm } from './components/LoginForm';
@@ -73,15 +73,18 @@ const EXEMPT_VIEWS = ['enveloppe'];
 const VIEW_ORDER = ['home', 'pointage', 'rapport', 'refection', 'statistics', 'fichier', 'srm-excel', 'enveloppe', 'settings'];
 const PageTransition = ({ viewKey, direction, children }) => {
   const shouldReduceMotion = useReducedMotion();
+  // Phone & UX phase (2026-11-26): smaller slide distance on narrow
+  // screens so the transition doesn't feel like a long swipe.
+  const x = typeof window !== 'undefined' && window.innerWidth < 640 ? 12 : 28;
   if (shouldReduceMotion) {
     return <div className="min-w-0">{children}</div>;
   }
   return (
     <Motion.div
       key={viewKey}
-      initial={{ opacity: 0, x: direction * 28, filter: 'blur(4px)' }}
+      initial={{ opacity: 0, x: direction * x, filter: 'blur(4px)' }}
       animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-      exit={{ opacity: 0, x: direction * -28, filter: 'blur(4px)' }}
+      exit={{ opacity: 0, x: direction * -x, filter: 'blur(4px)' }}
       transition={{ duration: 0.22, ease: 'easeOut' }}
       className="min-w-0"
     >
@@ -90,8 +93,12 @@ const PageTransition = ({ viewKey, direction, children }) => {
   );
 };
 
+// Phone & UX phase (2026-11-26): only these views read the shared
+// workReports listener; the other views don't pay for its snapshots.
+const DASHBOARD_VIEWS = ['home', 'rapport', 'statistics', 'fichier', 'settings'];
+
 const AuthenticatedApp = ({ user, activeView, setActiveView, theme, onToggleTheme, accent, onAccentChange, isThemeExempt, effectiveTheme, effectiveAccent }) => {
-  const dashboardData = useDashboardData(user);
+  const dashboardData = useDashboardData(user, DASHBOARD_VIEWS.includes(activeView));
   // Batch 2: direction is now derived with the "adjust state during
   // render" pattern instead of reading prevViewRef.current during
   // render (react-hooks/refs). When the view changes, direction is
@@ -207,13 +214,38 @@ function App() {
   // every other view. No view file, data or route was changed.
   const [activeView, setActiveView] = useState(() => {
     try {
+      // Phone & UX phase (2026-11-26): a #view hash in the URL wins over
+      // the saved view, so a shared link opens on the right page.
+      const hash = window.location.hash.replace('#', '');
+      if (KNOWN_VIEWS.includes(hash)) return hash;
       const saved = localStorage.getItem('hydraucan-active-view');
       return KNOWN_VIEWS.includes(saved) ? saved : 'home';
     } catch { return 'home'; }
   });
   useEffect(() => {
     try { localStorage.setItem('hydraucan-active-view', activeView); } catch { /* storage unavailable — keep in-memory default */ }
+    // Keep the URL hash in sync so a view can be linked and the browser
+    // back button walks back through views.
+    if (window.location.hash !== `#${activeView}`) {
+      window.history.pushState(null, '', `#${activeView}`);
+    }
   }, [activeView]);
+  useEffect(() => {
+    const onPopState = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (KNOWN_VIEWS.includes(hash)) setActiveView(hash);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+  // Phone & UX phase (2026-11-26): toast position follows the screen —
+  // bottom-center on phones (reachable by thumb), top-right on desktop.
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('hydraucan-theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
   });
@@ -249,6 +281,21 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // Phone & UX phase (2026-11-26): on sign-out only, drop any Enveloppe
+  // drafts so the next worker on a shared tablet doesn't see the
+  // previous one's in-progress report. Drafts are NOT cleared while
+  // signed in (a refresh must keep them for restore).
+  const prevUserRef = useRef(user);
+  useEffect(() => {
+    const prev = prevUserRef.current;
+    prevUserRef.current = user;
+    if (prev && !user) {
+      try {
+        Object.keys(localStorage).filter((k) => k.startsWith('hydraucan-enveloppe-draft-')).forEach((k) => localStorage.removeItem(k));
+      } catch { /* storage unavailable — nothing to clear */ }
+    }
+  }, [user]);
+
   if (authLoading) {
     // Transitions Batch 3 (copy only): skeleton loader and reveal,
     // in the transitions.dev "skeleton loader and reveal" style —
@@ -258,7 +305,7 @@ function App() {
     // (see the Motion wrapper on its return). No data is shown
     // here, only placeholders.
     return (
-      <div className={`min-h-screen flex ${theme === 'dark' ? 'bg-[#0F172A]' : 'bg-[#EEF2F7]'}`} aria-label="Chargement">
+      <div className={`min-h-screen flex ${theme === 'dark' ? 'bg-[#0B1220]' : 'bg-[#EDF1F5]'}`} aria-label="Chargement">
         <div className="hidden lg:block w-[240px] shrink-0 p-6 space-y-4">
           <div className="h-12 rounded-lg bg-slate-300/60 animate-pulse" />
           <div className="h-16 rounded-lg bg-slate-300/40 animate-pulse" />
@@ -268,7 +315,7 @@ function App() {
         </div>
         <div className="flex-1 min-w-0 p-2">
           <div className="h-12 rounded-lg bg-slate-300/40 animate-pulse mb-2" />
-          <div className="bg-white rounded-2xl border border-line p-6 space-y-4">
+          <div className={`rounded-2xl border p-6 space-y-4 ${theme === 'dark' ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-line'}`}>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="h-24 rounded-xl bg-slate-200/70 animate-pulse" />
               <div className="h-24 rounded-xl bg-slate-200/70 animate-pulse" />
@@ -286,17 +333,17 @@ function App() {
 
   if (!user) {
     return (
-      <div className={`min-h-screen flex flex-col ${theme === 'dark' ? 'bg-[#0F172A]' : 'bg-[#EEF2F7]'}`}>
+      <div className={`min-h-screen flex flex-col ${theme === 'dark' ? 'bg-[#0B1220]' : 'bg-[#EDF1F5]'}`}>
         <header className="bg-[#16294D] text-white">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-            <img src="/logo-hydracane.png" alt="HYDRAUCAN" className="h-10 w-auto object-contain brightness-200" />
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+            <img src="/logo-hydracane.png" alt="HYDRAUCAN" className="h-8 sm:h-10 w-auto object-contain brightness-200" />
             <div className="flex items-center gap-3">
               <AccentPicker accent={accent} onAccentChange={setAccent} />
               <button onClick={toggleTheme} aria-label="Changer de thème" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/20 px-3 py-1 text-[11px] font-bold hover:bg-white/20 transition">
                 {theme === 'dark' ? 'Clair' : 'Sombre'}
               </button>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/20 px-3 py-1 text-[11px] font-bold">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-300" /> Espace employés
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/20 px-3 py-1 text-[11px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#2DD4BF]" /> Espace employés
               </span>
             </div>
           </div>
@@ -314,7 +361,7 @@ function App() {
 
   return (
     <Motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: 'easeOut' }}>
-      <Toaster position="top-right" richColors />
+      <Toaster position={isMobile ? 'bottom-center' : 'top-right'} richColors />
       <AuthenticatedApp user={user} activeView={activeView} setActiveView={setActiveView} theme={theme} onToggleTheme={toggleTheme} accent={accent} onAccentChange={setAccent} isThemeExempt={isThemeExempt} effectiveTheme={effectiveTheme} effectiveAccent={effectiveAccent} />
     </Motion.div>
   );

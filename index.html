@@ -5,6 +5,14 @@
     <link rel="icon" type="image/png" href="/ico.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#16294D" />
+    <!-- Upgrade (copy, 2026-11-26 — Security phase): strict Content
+         Security Policy. Only this origin, Firebase/Google APIs,
+         Cloudinary (proof uploads + proof images), Google Fonts and
+         OpenStreetMap tiles (Leaflet maps) may load or connect. Inline
+         styles are allowed because React/motion set style attributes;
+         inline scripts, plugins and frames are not. If a new external
+         service is added, its domain must be added here first. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://res.cloudinary.com https://firebasestorage.googleapis.com https://*.tile.openstreetmap.org; connect-src 'self' https://*.googleapis.com wss://*.googleapis.com https://api.cloudinary.com https://res.cloudinary.com; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'" />
     <meta name="description" content="Hydraucan, located in Fquih Ben Salah. We are professional specialists in hydraulics providing expert solutions and management for hydraulic systems." />
     <meta name="keywords" content="Hydraucan, Fquih Ben Salah, hydraulics, professional specialists, hydraulic systems" />
     <title>Hydraucan | Hydraulic Solutions</title>

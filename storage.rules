@@ -1,9 +1,12 @@
 rules_version = '2';
 
-// Security fix (copy, 2026-10-28): proofs are now stored per user.
-// Previously any authenticated user could read and delete anything under
-// enveloppe_preuves. New uploads go to enveloppe_preuves/<uid>/... (see
-// EnveloppeFinanciereView.jsx), and only that user may read/write them.
+// Upgrade (copy, 2026-11-26 — Gemini 4 Hydrogen plan, Security phase):
+// proofs are stored per user, and shared-legacy proofs get their own
+// readable-by-all path. Previously any authenticated user could read
+// and delete anything under enveloppe_preuves; then per-user paths
+// broke shared legacy reports, because a proof uploaded by Employee B
+// into enveloppe_preuves/<B_uid>/... was unreadable (403) for Employee
+// A even though the legacy Firestore document itself was shared.
 //
 // IMPORTANT: this file is NOT deployed by Vercel. Paste it into Firebase
 // Console > Storage > Rules and publish it there for it to take effect.
@@ -13,15 +16,53 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    match /enveloppe_preuves/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    // A proof file is either a photo or a PDF receipt, max 10 MB.
+    // SVG, HTML and scripts are rejected: a stored SVG/HTML file
+    // served from a Storage URL could run code in the viewer's browser.
+    function isAllowedProof() {
+      return request.resource.size <= 10 * 1024 * 1024
+        && (request.resource.contentType.matches('image/(jpeg|png|webp)')
+            || request.resource.contentType == 'application/pdf');
     }
+
+    // Per-user proofs (2026-10-28): new uploads go to
+    // enveloppe_preuves/<uid>/... (see EnveloppeFinanciereView.jsx),
+    // and only that user may read, replace or delete them.
+    match /enveloppe_preuves/{userId}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && request.auth.uid == userId && isAllowedProof();
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Shared-legacy proofs (2026-11-26): when a signed-in employee
+    // edits an ownerless (legacy) Enveloppe report, new proofs go to
+    // enveloppe_preuves/shared_legacy/<random>/<file> so every
+    // signed-in employee can read them, like the report itself.
+    // Create-only: nobody may overwrite or delete another employee's
+    // shared proof through this path.
+    match /enveloppe_preuves/shared_legacy/{folder}/{file} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && isAllowedProof();
+    }
+
+    // Old 'legacy' folder (2026-10-28 – 2026-11-26): proofs uploaded
+    // while a report had no owner went to
+    // enveloppe_preuves/legacy/<timestamp-random>/<file> (3 segments),
+    // which matched neither the per-user rule (uid 'legacy' never
+    // matches) nor the flat 2-segment rule below, so they were
+    // unreadable by everyone. They are now readable by any signed-in
+    // employee; no new uploads go here.
+    match /enveloppe_preuves/legacy/{folder}/{file} {
+      allow read: if request.auth != null;
+    }
+
     // Legacy proofs (2026-10-29): uploads before per-user paths live in
     // the flat folder enveloppe_preuves/<timestamp-random>/<file> — two
     // segments, so they do not match the per-user rule above. Like the
     // legacy entries they belong to, they stay readable by any signed-in
     // employee; writes to the flat folder stay denied (new uploads go
-    // to per-user folders).
+    // to per-user or shared_legacy folders).
     match /enveloppe_preuves/{folder}/{file} {
       allow read: if request.auth != null;
     }
