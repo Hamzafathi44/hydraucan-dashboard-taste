@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { generateReportPDF } from '../pdfGenerator';
 import { useRefections } from '../hooks/useRefections';
 import TopoMapPicker from '../components/TopoMapPicker';
@@ -36,6 +36,15 @@ export const RefectionView = ({ user }) => {
   // Two-step delete arming (same pattern as Enveloppe, 2026-11-27):
   // first tap arms the button ("Sûr ?"), second really deletes.
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
+  // Delayed delete (2026-11-27 fix): the entry is only hidden locally
+  // for 8s and really deleted when the timer fires, so "Annuler" just
+  // cancels the timer. Deleting then re-adding would have stamped a
+  // fresh userId/createdAt on the restored copy — for a legacy
+  // (ownerless) entry that would silently make it owned by the
+  // restorer and hide it from the other employees.
+  const [pendingDeleteIds, setPendingDeleteIds] = useState(() => new Set());
+  const pendingTimers = useRef({});
 
   const [measurements, setMeasurements] = useState([
     { l: '', L: '', nature: '' }
@@ -130,33 +139,39 @@ export const RefectionView = ({ user }) => {
   };
 
   // Two-step delete + 8s undo (same pattern as Enveloppe, 2026-11-27):
-  // the first tap arms the button, the second deletes, and the undo
-  // toast re-adds the entry from a snapshot of its content.
-  const handleDelete = async (entry) => {
+  // the first tap arms the button, the second hides the entry and
+  // starts an 8s timer; the entry is only really deleted when the
+  // timer fires, and "Annuler" cancels the timer so the entry was
+  // never deleted at all — its id, owner (or ownerless legacy status)
+  // and createdAt are preserved exactly.
+  const handleDelete = (entry) => {
     const id = entry.id;
     setConfirmDeleteId(null);
     if (editingId === id) resetForm();
-    const snapshot = {
-      date: entry.date || '',
-      reference: entry.reference || '',
-      type: entry.type || 'Refection',
-      address: entry.address || '',
-      measurements: (entry.mList || []).map((m) => ({ l: m.l || '', L: m.L || '', nature: m.nature || '' })),
-      points: (entry.pts || []).filter(Boolean)
-    };
-    const result = await deleteRefection(id);
-    if (!result.success) {
-      toast.error('Failed to delete');
-      return;
-    }
+    setPendingDeleteIds((prev) => new Set(prev).add(id));
+    pendingTimers.current[id] = setTimeout(async () => {
+      const result = await deleteRefection(id);
+      delete pendingTimers.current[id];
+      setPendingDeleteIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      if (!result.success) toast.error('Failed to delete');
+    }, 8000);
     toast('Entrée supprimée', {
       duration: 8000,
       action: {
         label: 'Annuler',
-        onClick: async () => {
-          const restored = await addRefection(snapshot);
-          if (restored.success) toast.success('Entrée restaurée');
-          else toast.error('Échec de la restauration');
+        onClick: () => {
+          clearTimeout(pendingTimers.current[id]);
+          delete pendingTimers.current[id];
+          setPendingDeleteIds((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+          toast.success('Suppression annulée');
         }
       }
     });
@@ -208,6 +223,7 @@ export const RefectionView = ({ user }) => {
   // list is small, so it is computed inline and the compiler
   // memoizes it automatically. Same filter logic, no behaviour change.
   const byDate = refections.filter((r) => {
+    if (pendingDeleteIds.has(r.id)) return false;
     if (selectedDay) return (r.date || '') === selectedDay;
     if (selectedMonth) return (r.date || '').startsWith(selectedMonth);
     return true;
