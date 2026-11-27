@@ -4,7 +4,7 @@ import { useRefections } from '../hooks/useRefections';
 import TopoMapPicker from '../components/TopoMapPicker';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
-  Wrench, FileDown, Save, Trash2, Loader2, Search, Plus, X, MapPin, Pencil, Calendar, Camera
+  Wrench, FileDown, Save, Trash2, Loader2, Search, Plus, X, MapPin, Pencil, Calendar, Camera, Check, Clock, ArrowLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -100,7 +100,15 @@ export const RefectionView = ({ user }) => {
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [mapPoints, setMapPoints] = useState([]);
   const [editingId, setEditingId] = useState(null);
-  
+
+  // Choice screen (copy, 2026-11-27): entering Réfection shows just two
+  // options — Terminées / Non terminées — each with its count. Selecting
+  // one opens that mode's list + form. null = choice screen. The mode is
+  // local state only and resets every time the view is entered.
+  const [mode, setMode] = useState(null);
+  const completeCount = refections.filter((r) => r.incomplete !== true).length;
+  const incompleteCount = refections.filter((r) => r.incomplete === true).length;
+
   // ✅ NEW: State for the Month Filter
   const [selectedMonth, setSelectedMonth] = useState('');
   // Single-day filter + download (copy, 2026-10-29): a day and a month
@@ -188,12 +196,32 @@ export const RefectionView = ({ user }) => {
     );
   };
 
-  const resetForm = () => {
-    setFormData({ date: '', reference: '', type: 'Refection', address: '', incomplete: false });
+  const resetForm = (forMode) => {
+    // The form's "incomplete" follows the selected mode (there is no
+    // checkbox any more). forMode lets the mode-select handler pass the
+    // mode being entered, since setMode has not applied yet.
+    const m = forMode !== undefined ? forMode : mode;
+    setFormData({ date: '', reference: '', type: 'Refection', address: '', incomplete: m === 'incomplete' });
     setMeasurements([{ l: '', L: '', nature: '', photoUrl: null, photoData: null }]);
     setRemaining([{ nature: '', qty: '', unit: 'm²' }]);
     setMapPoints([]);
     setEditingId(null);
+  };
+
+  const selectMode = (m) => {
+    resetForm(m);
+    setSelectedMonth('');
+    setSelectedDay('');
+    setSearch('');
+    setMode(m);
+  };
+
+  const backToChoice = () => {
+    resetForm(null);
+    setSelectedMonth('');
+    setSelectedDay('');
+    setSearch('');
+    setMode(null);
   };
 
   const handleEditClick = (entry) => {
@@ -262,9 +290,12 @@ export const RefectionView = ({ user }) => {
       })
     );
 
-    // "Reste à faire" is only stored for incomplete entries; unchecking
-    // "Non terminée" clears it on save.
-    const cleanRemaining = formData.incomplete
+    // The entry's status follows the selected mode for new entries, and
+    // the entry's current status when editing (there is no checkbox any
+    // more, so editing never flips it silently).
+    const entryIncomplete = editingId ? !!formData.incomplete : mode === 'incomplete';
+    // "Reste à faire" is only stored for incomplete entries.
+    const cleanRemaining = entryIncomplete
       ? remaining
           .filter((r) => r.nature && String(r.qty).trim() !== '')
           .map((r) => ({ nature: r.nature, qty: String(r.qty).trim(), unit: r.unit || 'm²' }))
@@ -277,7 +308,7 @@ export const RefectionView = ({ user }) => {
         ...formData,
         measurements: savedMeasurements,
         points: mapPoints,
-        incomplete: !!formData.incomplete,
+        incomplete: entryIncomplete,
         remaining: cleanRemaining
       });
     } else {
@@ -285,7 +316,7 @@ export const RefectionView = ({ user }) => {
         ...formData,
         measurements: savedMeasurements,
         points: mapPoints,
-        incomplete: !!formData.incomplete,
+        incomplete: entryIncomplete,
         remaining: cleanRemaining
       });
     }
@@ -306,6 +337,19 @@ export const RefectionView = ({ user }) => {
     const result = await deleteRefection(id);
     if (result.success) toast.success('Deleted');
     else toast.error('Failed to delete');
+  };
+
+  // Move an entry between the two lists: "Terminer" in the Non
+  // terminées list, "Rouvrir" in the Terminées list. Only the flag
+  // changes — the entry keeps its id, owner and content.
+  const handleToggleStatus = async (entry, toIncomplete) => {
+    if (editingId === entry.id) resetForm();
+    const result = await updateRefection(entry.id, { incomplete: toIncomplete });
+    if (result.success) {
+      toast.success(toIncomplete ? 'Entrée rouverte (non terminée)' : 'Entrée marquée terminée');
+    } else {
+      toast.error('Échec de la mise à jour');
+    }
   };
 
   const handleSingleDownload = (entry) => {
@@ -354,6 +398,9 @@ export const RefectionView = ({ user }) => {
   // list is small, so it is computed inline and the compiler
   // memoizes it automatically. Same filter logic, no behaviour change.
   const byDate = refections.filter((r) => {
+    // Split lists: each mode shows only its own entries (the choice
+    // screen renders no list, so the null mode never matters here).
+    if (mode && (mode === 'incomplete' ? r.incomplete !== true : r.incomplete === true)) return false;
     if (selectedDay) return (r.date || '') === selectedDay;
     if (selectedMonth) return (r.date || '').startsWith(selectedMonth);
     return true;
@@ -423,6 +470,49 @@ export const RefectionView = ({ user }) => {
         </p>
       </div>
 
+      {mode === null ? (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
+            <button
+              type="button"
+              onClick={() => selectMode('complete')}
+              className="flex flex-col items-start gap-2 bg-slate-900/50 backdrop-blur-md border border-slate-700/60 hover:border-emerald-500/50 rounded-2xl p-6 shadow-lg text-left transition"
+            >
+              <span className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                <Check className="w-5 h-5 text-emerald-400" />
+              </span>
+              <span className="text-lg font-bold text-white">Terminées</span>
+              <span className="text-sm text-slate-400">{completeCount} entrée{completeCount > 1 ? 's' : ''}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => selectMode('incomplete')}
+              className="flex flex-col items-start gap-2 bg-slate-900/50 backdrop-blur-md border border-amber-500/40 hover:border-amber-500/60 rounded-2xl p-6 shadow-lg text-left transition"
+            >
+              <span className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-amber-400" />
+              </span>
+              <span className="text-lg font-bold text-white">Non terminées</span>
+              <span className="text-sm text-slate-400">{incompleteCount} entrée{incompleteCount > 1 ? 's' : ''}</span>
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center gap-3 mb-6">
+            <button
+              type="button"
+              onClick={backToChoice}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-white bg-slate-900/60 hover:bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 transition"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Choisir
+            </button>
+            <h3 className="text-lg font-bold text-white">
+              {mode === 'incomplete' ? 'Non terminées' : 'Terminées'}
+            </h3>
+          </div>
+
       {/* FORM CARD */}
       <div className={`bg-slate-900/50 backdrop-blur-md border ${editingId ? 'border-yellow-500/50 shadow-yellow-500/10' : 'border-slate-700/60'} rounded-2xl p-5 md:p-6 shadow-lg max-w-5xl mb-6 transition-colors duration-300`}>
         <div className="flex items-center justify-between mb-5">
@@ -472,18 +562,6 @@ export const RefectionView = ({ user }) => {
           </div>
         </div>
 
-        <div className="mt-4">
-          <label className="flex items-center gap-2.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={!!formData.incomplete}
-              onChange={(e) => setFormData({ ...formData, incomplete: e.target.checked })}
-              className="w-4 h-4 accent-amber-400"
-            />
-            <span className="text-sm font-bold text-slate-200">Non terminée</span>
-            <span className="text-xs text-slate-500">— travail en cours, avec un reste à faire par nature</span>
-          </label>
-        </div>
 
         {formData.incomplete && (
           <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
@@ -794,6 +872,7 @@ export const RefectionView = ({ user }) => {
                   <th className="text-center py-2 px-2">Y</th>
                   <th className="text-center py-2 px-2">PDF</th>
                   <th className="text-center py-2 px-2">Edit</th>
+                  <th className="text-center py-2 px-2">Statut</th>
                   <th className="text-center py-2 px-2"></th>
                 </tr>
               </thead>
@@ -883,6 +962,25 @@ export const RefectionView = ({ user }) => {
                               </button>
                             </td>
                             <td rowSpan={totalRows} className="text-center py-2 px-2 align-top">
+                              {mode === 'incomplete' ? (
+                                <button
+                                  onClick={() => handleToggleStatus(r, false)}
+                                  className="text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-2 py-1.5 transition text-[11px] font-bold whitespace-nowrap"
+                                  title="Marquer cette entrée terminée"
+                                >
+                                  Terminer
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleToggleStatus(r, true)}
+                                  className="text-amber-300 hover:text-amber-200 hover:bg-amber-500/10 border border-amber-500/30 rounded-lg px-2 py-1.5 transition text-[11px] font-bold whitespace-nowrap"
+                                  title="Rouvrir cette entrée (non terminée)"
+                                >
+                                  Rouvrir
+                                </button>
+                              )}
+                            </td>
+                            <td rowSpan={totalRows} className="text-center py-2 px-2 align-top">
                               <button
                                 onClick={() => handleDelete(r.id)}
                                 className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg p-1.5 transition"
@@ -903,6 +1001,8 @@ export const RefectionView = ({ user }) => {
           </div>
         )}
       </div>
+        </>
+      )}
 
       <TopoMapPicker
         isOpen={isMapOpen}
