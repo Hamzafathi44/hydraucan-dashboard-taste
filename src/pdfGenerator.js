@@ -203,15 +203,16 @@ export const generateReportPDF = async (filteredList, selectedMonth, customTitle
 
 // New PDF form for non-completed Réfection entries (copy, 2026-11-27):
 // a distinct "Reste à faire" form — NOT the complete entries'
-// measurement table. Per entry: date / reference / type / address,
-// then a Date | Nature | Quantité restante | Unité | Photo | X | Y table
-// of what is still needed (date and coordinates shown once, on the
-// first row of the entry's table, like the completed PDF's merged-date
-// style), plus a summary totalling nature + unit. Coordinates come from
-// the entry's points (Topo Map picker), read via formatPoints exactly
-// like the completed PDF does. Photos are links, not images: the Photo
-// column shows a short clickable "Voir photo" link, so the photo takes
-// no vertical space in the PDF and still opens with one tap.
+// measurement table. All entry details live INSIDE the table (no
+// header line above it, like the completed PDF): Date | Référence |
+// Type | Adresse | Nature | Quantité restante | Unité | Photo | X | Y.
+// Entry-level values appear on the first row of the entry's rows only,
+// reste-level values on every row. Landscape A4 like the completed
+// PDF, so the 10 columns fit. Coordinates come from the entry's points
+// (Topo Map picker), read via formatPoints exactly like the completed
+// PDF does. Photos are links, not images: the Photo column shows a
+// short clickable "Voir photo" link, so the photo takes no vertical
+// space in the PDF and still opens with one tap.
 const formatQtyTotal = (n) => {
   if (n == null || Number.isNaN(n)) return '';
   return String(Math.round(n * 100) / 100);
@@ -240,10 +241,10 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
     : (selectedMonth === 'Tous' ? 'Global' : (selectedMonth || ''));
   const fileTitle = `Réfection non terminée - ${detail || 'Reste à faire'}`;
 
-  const doc = new jsPDF('portrait', 'mm', 'a4');
+  // Landscape A4 like the completed PDF, so the 10 columns fit.
+  const doc = new jsPDF('landscape', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;
-  const contentWidth = pageWidth - margin * 2;
 
   try {
     const logoData = await toBase64('/logo-hydracane.png');
@@ -294,46 +295,39 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
   let y = 44;
 
   for (const { entry, pts, lines } of entries) {
-    // Start a new page if there is not enough room left for the entry
-    // header + a few rows.
-    if (y > 250) {
+    // Start a new page if there is not enough room left for a few rows
+    // (landscape A4 is 210 mm tall).
+    if (y > 170) {
       doc.addPage();
       y = 20;
     }
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(22, 41, 77);
-    doc.text(`${entry.date || ''}  —  ${entry.reference || 'sans référence'}`, margin, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(60, 60, 60);
-    const meta = [entry.type || '', entry.address || ''].filter(Boolean).join('  •  ');
-    if (meta) {
-      const metaLines = doc.splitTextToSize(meta, contentWidth);
-      metaLines.forEach((line) => {
-        doc.text(line, margin, y);
-        y += 5;
-      });
-      y += 1;
-    }
-    doc.setTextColor(0, 0, 0);
 
-    if (lines.length === 0) {
-      doc.setFontSize(10);
-      doc.setTextColor(120, 120, 120);
-      doc.text("Aucun reste à faire renseigné.", margin, y);
-      doc.setTextColor(0, 0, 0);
-      y += 10;
-      continue;
-    }
-
-    // X and Y belong to the entry, not to each reste line — shown on
-    // the first row only, like the Date column; "—" when the entry has
-    // no coordinates from the Topo Map picker.
-    const body = lines.map((line, idx) => [idx === 0 ? (entry.date || '') : '', line.nature, String(line.qty), line.unit, line.photoUrl ? 'Voir photo' : '—', idx === 0 ? (pts.x || '—') : '', idx === 0 ? (pts.y || '—') : '']);
+    // All entry details live inside the table now (copy, 2026-11-27):
+    // no header line above the table. Entry-level values (Date,
+    // Référence, Type, Adresse, X, Y) appear on the first row of the
+    // entry's rows only, blank on the following rows — the completed
+    // PDF's merged-cell style, per entry table. An entry with no
+    // remaining lines gets one row with its details and the message
+    // in the Nature cell.
+    const body = lines.length === 0
+      ? [[entry.date || '', entry.reference || '', entry.type || '', entry.address || '', 'Aucun reste à faire renseigné.', '', '', '—', pts.x || '—', pts.y || '—']]
+      : lines.map((line, idx) => [
+          idx === 0 ? (entry.date || '') : '',
+          idx === 0 ? (entry.reference || '') : '',
+          idx === 0 ? (entry.type || '') : '',
+          idx === 0 ? (entry.address || '') : '',
+          line.nature,
+          String(line.qty),
+          line.unit,
+          line.photoUrl ? 'Voir photo' : '—',
+          // X and Y belong to the entry, not to each reste line —
+          // shown on the first row only; "—" when the entry has no
+          // coordinates from the Topo Map picker.
+          idx === 0 ? (pts.x || '—') : '',
+          idx === 0 ? (pts.y || '—') : ''
+        ]);
     autoTable(doc, {
-      head: [["Date", "Nature", "Quantité restante", "Unité", "Photo", "X", "Y"]],
+      head: [["Date", "Référence", "Type", "Adresse", "Nature", "Quantité restante", "Unité", "Photo", "X", "Y"]],
       body,
       startY: y,
       margin: { left: margin, right: margin },
@@ -347,17 +341,20 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
       },
       columnStyles: {
         0: { cellWidth: 24, halign: 'center' },
-        1: { cellWidth: 38 },
-        2: { cellWidth: 30, halign: 'center' },
-        3: { cellWidth: 18, halign: 'center' },
-        4: { cellWidth: 36, halign: 'center' },
-        5: { cellWidth: 18, halign: 'center' },
-        6: { cellWidth: 18, halign: 'center' }
+        1: { cellWidth: 30 },
+        2: { cellWidth: 22, halign: 'center' },
+        3: { cellWidth: 42 },
+        4: { cellWidth: 32 },
+        5: { cellWidth: 28, halign: 'center' },
+        6: { cellWidth: 16, halign: 'center' },
+        7: { cellWidth: 32, halign: 'center' },
+        8: { cellWidth: 22, halign: 'center' },
+        9: { cellWidth: 21, halign: 'center' }
       },
       styles: { valign: 'middle', halign: 'left', fontSize: 10, cellPadding: 2 },
       didParseCell: function (data) {
         // Link cells read as links: blue text on rows that have a photo.
-        if (data.cell.section === 'body' && data.column.index === 4) {
+        if (data.cell.section === 'body' && data.column.index === 7) {
           const line = lines[data.row.index];
           if (line && line.photoUrl) {
             data.cell.styles.textColor = [37, 99, 235];
@@ -368,7 +365,7 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
         // Make the "Voir photo" cell a real clickable link to the photo,
         // and underline it like a link. The photo itself is never drawn,
         // so it takes no vertical space in the PDF.
-        if (data.cell.section === 'body' && data.column.index === 4) {
+        if (data.cell.section === 'body' && data.column.index === 7) {
           const line = lines[data.row.index];
           if (line && line.photoUrl) {
             doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: line.photoUrl });
@@ -401,7 +398,7 @@ export const generateIncompleteReportPDF = async (filteredList, selectedMonth, c
     return [nature, formatQtyTotal(qty), unit];
   });
 
-  if (y > 250) {
+  if (y > 170) {
     doc.addPage();
     y = 20;
   }
