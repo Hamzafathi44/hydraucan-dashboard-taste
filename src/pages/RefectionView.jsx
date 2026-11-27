@@ -357,17 +357,34 @@ export const RefectionView = ({ user }) => {
     else toast.error('Failed to delete');
   };
 
-  // Move an entry between the two lists: "Terminer" in the Non
-  // terminées list, "Rouvrir" in the Terminées list. Only the flag
-  // changes — the entry keeps its id, owner and content.
-  const handleToggleStatus = async (entry, toIncomplete) => {
-    if (editingId === entry.id) resetForm();
-    const result = await updateRefection(entry.id, { incomplete: toIncomplete });
-    if (result.success) {
-      toast.success(toIncomplete ? 'Entrée rouverte (non terminée)' : 'Entrée marquée terminée');
-    } else {
-      toast.error('Échec de la mise à jour');
-    }
+  // Switch an entry between the two lists (copy, 2026-11-27):
+  // "Terminer" in the Non terminées list, "Rouvrir" in the Terminées
+  // list. The switch opens the entry in the OTHER mode's form with
+  // one empty line ready to fill (measurements for Terminer, "Reste à
+  // faire" for Rouvrir) — measurements are l × L dimensions and reste
+  // quantities are not, so nothing is prefilled from the other side.
+  // Nothing is written until the user saves: if they back out, the
+  // entry stays in its current list. On save, the entry takes the new
+  // status with the data filled in the form.
+  const handleSwitchStatus = (entry, toIncomplete) => {
+    setMode(toIncomplete ? 'incomplete' : 'complete');
+    setFormData({
+      date: entry.date || '',
+      reference: entry.reference || '',
+      type: entry.type || 'Refection',
+      address: entry.address || '',
+      incomplete: toIncomplete
+    });
+    setMeasurements([{ l: '', L: '', nature: '', photoUrl: null, photoData: null }]);
+    setRemaining([{ nature: '', qty: '', unit: 'm²', photoUrl: null, photoData: null }]);
+    setMapPoints(entry.points || []);
+    setEditingId(entry.id);
+    toast.info(
+      toIncomplete
+        ? 'Indiquez ce qu’il reste à faire puis enregistrez'
+        : 'Complétez les mesures puis enregistrez'
+    );
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSingleDownload = (entry) => {
@@ -1018,17 +1035,17 @@ export const RefectionView = ({ user }) => {
                             <td rowSpan={totalRows} className="text-center py-2 px-2 align-top">
                               {mode === 'incomplete' ? (
                                 <button
-                                  onClick={() => handleToggleStatus(r, false)}
+                                  onClick={() => handleSwitchStatus(r, false)}
                                   className="text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-2 py-1.5 transition text-[11px] font-bold whitespace-nowrap"
-                                  title="Marquer cette entrée terminée"
+                                  title="Terminer : compléter les mesures"
                                 >
                                   Terminer
                                 </button>
                               ) : (
                                 <button
-                                  onClick={() => handleToggleStatus(r, true)}
+                                  onClick={() => handleSwitchStatus(r, true)}
                                   className="text-amber-300 hover:text-amber-200 hover:bg-amber-500/10 border border-amber-500/30 rounded-lg px-2 py-1.5 transition text-[11px] font-bold whitespace-nowrap"
-                                  title="Rouvrir cette entrée (non terminée)"
+                                  title="Rouvrir : indiquer le reste à faire"
                                 >
                                   Rouvrir
                                 </button>
